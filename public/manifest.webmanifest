@@ -1,0 +1,22 @@
+{
+  "name": "CODEM-VDM · Centro de Operaciones de Emergencias",
+  "short_name": "CODEM-VDM",
+  "description": "Dashboard integral de gestión de emergencias para Viña del Mar y Región de Valparaíso. Integra SENAPRED, CONAF, SHOA, Guardia Marina, Bomberos CBV2, Carabineros y Radio.",
+  "lang": "es-CL",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#3a78b8",
+  "theme_color": "#3a78b8",
+  "categories": ["government", "utilities", "productivity"],
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

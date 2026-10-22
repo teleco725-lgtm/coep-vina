@@ -1,0 +1,272 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  ============================================================================
+  Paleta de la Municipalidad de Viña del Mar
+  ----------------------------------------------------------------------------
+  Colores institucionales: azul petróleo (mar) + arena dorada (playa).
+  Degradados suaves y de baja saturación para no fatigar la vista en
+  sesiones largas de monitoreo de emergencias (cumple criterios de
+  ergonomía visual y accesibilidad).
+  ============================================================================
+*/
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.75rem;
+
+  /* Fondo base: arena muy clara (playa) para descanso visual */
+  --background: oklch(0.97 0.012 85);
+  --foreground: oklch(0.22 0.04 230);
+
+  /* Tarjetas: blanco arena sutil con leve translucidez */
+  --card: oklch(1 0.004 85);
+  --card-foreground: oklch(0.22 0.04 230);
+  --popover: oklch(1 0.004 85);
+  --popover-foreground: oklch(0.22 0.04 230);
+
+  /* Primario: azul petróleo institucional de Viña del Mar */
+  --primary: oklch(0.40 0.09 230);
+  --primary-foreground: oklch(0.98 0.01 85);
+
+  /* Secundario: azul mar medio, más suave */
+  --secondary: oklch(0.90 0.03 220);
+  --secondary-foreground: oklch(0.30 0.06 230);
+
+  --muted: oklch(0.94 0.015 85);
+  --muted-foreground: oklch(0.50 0.03 220);
+
+  /* Acento: dorado arena cálido (representa la playa de Viña) */
+  --accent: oklch(0.88 0.06 85);
+  --accent-foreground: oklch(0.30 0.05 60);
+
+  --destructive: oklch(0.58 0.22 27);
+
+  --border: oklch(0.88 0.02 220);
+  --input: oklch(0.92 0.015 85);
+  --ring: oklch(0.45 0.09 230);
+
+  /* Colores de gráficas: paleta mar + arena + alertas */
+  --chart-1: oklch(0.42 0.10 230);  /* azul petróleo */
+  --chart-2: oklch(0.70 0.12 180);  /* teal mar */
+  --chart-3: oklch(0.80 0.10 85);   /* arena dorada */
+  --chart-4: oklch(0.62 0.18 30);   /* alerta naranja */
+  --chart-5: oklch(0.55 0.22 350);  /* alerta roja */
+
+  --sidebar: oklch(0.96 0.015 85);
+  --sidebar-foreground: oklch(0.22 0.04 230);
+  --sidebar-primary: oklch(0.40 0.09 230);
+  --sidebar-primary-foreground: oklch(0.98 0.01 85);
+  --sidebar-accent: oklch(0.90 0.03 220);
+  --sidebar-accent-foreground: oklch(0.30 0.06 230);
+  --sidebar-border: oklch(0.88 0.02 220);
+  --sidebar-ring: oklch(0.45 0.09 230);
+
+  /* Colores semánticos de severidad de alertas (SENAPRED) */
+  --sev-info: oklch(0.55 0.10 220);
+  --sev-watch: oklch(0.75 0.15 85);
+  --sev-warning: oklch(0.70 0.17 55);
+  --sev-critical: oklch(0.58 0.24 27);
+}
+
+.dark {
+  /* Modo oscuro: azul petróleo profundo nocturno (mar de noche) */
+  --background: oklch(0.18 0.03 235);
+  --foreground: oklch(0.95 0.015 85);
+  --card: oklch(0.24 0.035 235);
+  --card-foreground: oklch(0.95 0.015 85);
+  --popover: oklch(0.24 0.035 235);
+  --popover-foreground: oklch(0.95 0.015 85);
+  --primary: oklch(0.62 0.10 220);
+  --primary-foreground: oklch(0.15 0.03 235);
+  --secondary: oklch(0.32 0.04 235);
+  --secondary-foreground: oklch(0.95 0.015 85);
+  --muted: oklch(0.30 0.035 235);
+  --muted-foreground: oklch(0.72 0.02 220);
+  --accent: oklch(0.40 0.06 80);
+  --accent-foreground: oklch(0.95 0.015 85);
+  --destructive: oklch(0.68 0.22 22);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.62 0.10 220);
+  --chart-1: oklch(0.62 0.10 220);
+  --chart-2: oklch(0.70 0.12 180);
+  --chart-3: oklch(0.80 0.10 85);
+  --chart-4: oklch(0.68 0.20 45);
+  --chart-5: oklch(0.62 0.24 16);
+  --sidebar: oklch(0.22 0.035 235);
+  --sidebar-foreground: oklch(0.95 0.015 85);
+  --sidebar-primary: oklch(0.62 0.10 220);
+  --sidebar-primary-foreground: oklch(0.15 0.03 235);
+  --sidebar-accent: oklch(0.32 0.04 235);
+  --sidebar-accent-foreground: oklch(0.95 0.015 85);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.62 0.10 220);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply text-foreground;
+    /* Fondo degradado institucional de Viña del Mar:
+       azul petróleo del mar en la parte superior -> arena dorada de la
+       playa hacia abajo. Saturación baja, luminancia alta para NO
+       fatigar la vista durante el monitoreo continuo de emergencias. */
+    background-color: oklch(0.97 0.012 85);
+    background-image:
+      radial-gradient(120% 80% at 15% 0%, oklch(0.90 0.05 220 / 0.55) 0%, oklch(0.90 0.05 220 / 0) 60%),
+      radial-gradient(120% 90% at 100% 10%, oklch(0.85 0.07 190 / 0.40) 0%, oklch(0.85 0.07 190 / 0) 55%),
+      linear-gradient(160deg,
+        oklch(0.94 0.04 225) 0%,
+        oklch(0.95 0.03 210) 35%,
+        oklch(0.97 0.02 100) 70%,
+        oklch(0.98 0.015 80) 100%
+      );
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+
+  .dark body {
+    background-color: oklch(0.18 0.03 235);
+    background-image:
+      radial-gradient(120% 80% at 15% 0%, oklch(0.30 0.06 230 / 0.55) 0%, oklch(0.30 0.06 230 / 0) 60%),
+      radial-gradient(120% 90% at 100% 10%, oklch(0.26 0.05 200 / 0.45) 0%, oklch(0.26 0.05 200 / 0) 55%),
+      linear-gradient(160deg,
+        oklch(0.20 0.035 240) 0%,
+        oklch(0.19 0.03 225) 35%,
+        oklch(0.18 0.025 210) 70%,
+        oklch(0.17 0.02 195) 100%
+      );
+    background-attachment: fixed;
+  }
+}
+
+/* ============================================================================
+   Scrollbar personalizada - sutil, en paleta azul/arena, no invasiva
+   ============================================================================ */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.70 0.06 220 / 0.45) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.70 0.06 220 / 0.40);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.55 0.08 225 / 0.65);
+    background-clip: padding-box;
+  }
+  .dark * {
+    scrollbar-color: oklch(0.55 0.06 220 / 0.55) transparent;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: oklch(0.55 0.06 220 / 0.55);
+    background-clip: padding-box;
+  }
+}
+
+/* ============================================================================
+   Utilidades de severidad de alerta SENAPRED (badges, anillos, pulsos)
+   ============================================================================ */
+@layer utilities {
+  .sev-info     { color: var(--sev-info); }
+  .sev-watch    { color: var(--sev-watch); }
+  .sev-warning  { color: var(--sev-warning); }
+  .sev-critical { color: var(--sev-critical); }
+
+  .bg-sev-info     { background-color: var(--sev-info); }
+  .bg-sev-watch    { background-color: var(--sev-watch); }
+  .bg-sev-warning  { background-color: var(--sev-warning); }
+  .bg-sev-critical { background-color: var(--sev-critical); }
+
+  .border-sev-info     { border-color: var(--sev-info); }
+  .border-sev-watch    { border-color: var(--sev-watch); }
+  .border-sev-warning  { border-color: var(--sev-warning); }
+  .border-sev-critical { border-color: var(--sev-critical); }
+
+  /* Anillo pulsante para alertas críticas en el mapa */
+  @keyframes sev-pulse-critical {
+    0%   { box-shadow: 0 0 0 0 oklch(0.58 0.24 27 / 0.55); }
+    70%  { box-shadow: 0 0 0 14px oklch(0.58 0.24 27 / 0); }
+    100% { box-shadow: 0 0 0 0 oklch(0.58 0.24 27 / 0); }
+  }
+  .pulse-critical { animation: sev-pulse-critical 1.8s infinite; }
+
+  /* Vidrio suave (glassmorphism ligero) para tarjetas sobre el degradado */
+  .glass {
+    background-color: oklch(1 0.004 85 / 0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .dark .glass {
+    background-color: oklch(0.24 0.035 235 / 0.72);
+  }
+}
+
+/* Estilos mínimos para Leaflet dentro de la app (sin importar su CSS global) */
+.leaflet-container {
+  background: oklch(0.92 0.02 210) !important;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+.dark .leaflet-container {
+  background: oklch(0.22 0.03 220) !important;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 0.75rem;
+  box-shadow: 0 8px 24px oklch(0.20 0.04 230 / 0.25);
+}

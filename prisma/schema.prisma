@@ -1,0 +1,140 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Cuerpos / Fuentes de alerta integradas al dashboard
+model Source {
+  id          String   @id @default(cuid())
+  code        String   @unique // senapred | conaf | shoa | guardiamarina | cbv2 | carabineros | radio
+  name        String
+  description String?
+  enabled     Boolean  @default(true)
+  severity    String   @default("info") // info | watch | warning | critical
+  region      String   @default("Valparaíso")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  alerts      Alert[]
+}
+
+/// Alertas en tiempo real emitidas por cualquier fuente
+model Alert {
+  id          String   @id @default(cuid())
+  externalId  String? // identificador oficial si existe
+  sourceId    String
+  source      Source   @relation(fields: [sourceId], references: [id])
+  category    String // sismo | incendio | marea | meteorologica | tsunami | quimico | inundacion | seguridad | transito | radio
+  subcategory String? // p.ej. marea: alta | baja | media ; meteorologica: viento | lluvia | temperatura
+  severity    String   @default("info") // info | watch | warning | critical
+  state       String   @default("activa") // activa | en_proceso | cerrada
+  title       String
+  description String?
+  location    String? // texto descriptivo
+  lat         Float?
+  lng         Float?
+  region      String   @default("Valparaíso")
+  commune     String? // p.ej. Viña del Mar
+  meta        String? // JSON stringificado (campos extra)
+  issuedAt    DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([sourceId])
+  @@index([severity])
+  @@index([state])
+  @@index([issuedAt])
+}
+
+/// Incidentes georreferenciados de catástrofes (naturales o antrópicas) para el mapa
+model Incident {
+  id           String   @id @default(cuid())
+  type         String // incendio_forestal | incendio_urbano | sismo | tsunami | inundacion | deslizamiento | quimico | accidente | delito | otro
+  nature       String   @default("natural") // natural | antropico
+  severity     String   @default("info") // info | watch | warning | critical
+  state        String   @default("activa") // activa | contenida | controlada | cerrada
+  title        String
+  description  String?
+  lat          Float
+  lng          Float
+  commune      String   @default("Viña del Mar")
+  address      String?
+  radiusMeters Int      @default(500)
+  affected     Int      @default(0) // personas afectadas
+  evacuated    Int      @default(0)
+  resources    String?  // recursos desplegados (texto)
+  meta         String?  // JSON extra
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  closedAt     DateTime?
+
+  @@index([type])
+  @@index([state])
+  @@index([severity])
+}
+
+/// Ficha Individual de Bienestar y Riesgo (FIBER) - registro optimizado de personas/entidades
+model FichaFIBER {
+  id              String   @id @default(cuid())
+  code            String   @unique // código de ficha
+  fullName        String
+  rut             String?
+  address         String?
+  commune         String   @default("Viña del Mar")
+  lat             Float?
+  lng             Float?
+  phone           String?
+  email           String?
+  ageRange        String? // 0-17 | 18-29 | 30-59 | 60+
+  riskLevel       String   @default("bajo") // bajo | medio | alto | critico
+  vulnerability   String? // texto: movilidad reducida, salud crónica, etc
+  householdSize   Int      @default(1)
+  hasPets         Boolean  @default(false)
+  needsMedication Boolean  @default(false)
+  needsMobility   Boolean  @default(false)
+  needsEvacuation Boolean  @default(false)
+  status          String   @default("registrada") // registrada | evaluada | derivada | cerrada
+  notes           String?
+  assignedTo      String? // profesional responsable
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([riskLevel])
+  @@index([status])
+  @@index([commune])
+}
+
+/// Bitácora de auditoría (ciberseguridad / protección de datos - Ley 19.628, Ley 21.099)
+model AuditLog {
+  id        String   @id @default(cuid())
+  actor     String // usuario o sistema
+  action    String // create | update | delete | login | view
+  entity    String // Alert | FichaFIBER | Incident | Source
+  entityId  String?
+  ip        String?
+  userAgent String?
+  meta      String?
+  createdAt DateTime @default(now())
+
+  @@index([actor])
+  @@index([entity])
+  @@index([createdAt])
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("operador") // admin | supervisor | operador
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
