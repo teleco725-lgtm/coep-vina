@@ -136,3 +136,102 @@ Stage Summary:
 - Panel de cumplimiento legal (SENAPRED, ciberseguridad, protección de datos, leyes de catástrofes)
 - Tema visual de Viña del Mar (gradiente azul petróleo -> arena, suave, no molesto a la vista)
 - Sticky footer, responsive, modo oscuro, accesible
+
+---
+Task ID: 5
+Agent: full-stack-developer (memory-optimized forms)
+Task: Eliminar `react-hook-form`, `@hookform/resolvers/zod` y `zod` de los dos componentes de formulario pesados (`fichas-panel.tsx` e `incident-form.tsx`) para reducir el consumo de memoria del bundler Turbopack y evitar OOM-kills del dev server en el sandbox de 4GB.
+
+Work Log:
+- Lectura de `worklog.md` (Tasks 0, 2-a, 3, 4) y de los dos archivos objetivo (1046 y 530 líneas respectivamente). Confirmado que ambos usaban `useForm` + `zodResolver` + schemas `z.object(...)` + los wrappers `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `FormDescription` de `@/components/ui/form`.
+- Confirmado que los ESLint rules del proyecto desactivan `no-undef` y `@typescript-eslint/no-unused-vars`, por lo que el `bun run lint` previo pasaba limpio a pesar de que `fichas-panel.tsx` referenciaba `IdCard` (lucide-react) sin importarlo (bug latente: el icono de RUT nunca renderizaba en el diálogo de detalle).
+- Verificado el contrato de los endpoints contra los que los forms hacen POST/PATCH:
+  * `POST /api/incidents` (zod): type, nature, severity, state, title, description?, lat, lng, commune, address?, radiusMeters, affected, evacuated, resources?, meta?.
+  * `POST /api/fichas` (zod): fullName, rut?, address?, commune, lat?, lng?, phone?, email?(email), ageRange?, riskLevel, vulnerability?, householdSize(int>0), hasPets, needsMedication, needsMobility, needsEvacuation, notes?, assignedTo?, status?.
+  * `PATCH /api/fichas/[id]` (zod): riskLevel?, status?, notes?, assignedTo?, needs*?, …
+- **Reescritura de `src/components/dashboard/incident-form.tsx` (530 → 490 líneas)**:
+  * Eliminados imports: `useForm` de `react-hook-form`, `zodResolver` de `@hookform/resolvers/zod`, `z` de `zod`, y `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `FormDescription` de `@/components/ui/form`.
+  * Eliminado el schema `incidentSchema` (`z.object`) y el tipo `IncidentForm = z.infer<...>`.
+  * Añadido `Label` de `@/components/ui/label` para reemplazar `FormLabel`.
+  * Definido `interface IncidentFormState` con todos los campos (type, nature, severity, state, title, description, commune, address, lat, lng, radiusMeters, affected, evacuated, resources) — los numéricos como `string` para inputs controlados nativos (se convierten con `Number(...)` en el submit).
+  * Constante `INITIAL_STATE` con los mismos defaults del `useForm` anterior (severity='warning', state='activa', lat='-33.0245', lng='-71.5517', radiusMeters='500', affected='0', evacuated='0', etc.).
+  * Estado: `const [form, setForm] = useState<IncidentFormState>(INITIAL_STATE)` + `const [errors, setErrors] = useState<{ title?, lat?, lng? }>({})`.
+  * Helper `setField(key, value)` genérico que actualiza y limpia el error del campo correspondiente.
+  * `handleSubmit` hace validación manual: `title` no vacío, `lat` y `lng` no vacíos y parseable con `Number.isFinite`. Construye el body con los tipos correctos (description/address/resources → `null` si vacíos; numéricos convertidos; `meta` no se envía porque el backend lo marca opcional).
+  * Toasts sonner idénticos: `toast.error('Error al registrar catástrofe', {description})`, `toast.success('Catástrofe registrada', {description: title})`, `toast.error('Error de red al registrar el incidente.')`.
+  * `handleOpenChange` resetea el form al cerrar (mismo comportamiento que `form.reset()` de RHF).
+  * Llama `onCreated?.()` y `onOpenChange(false)` tras éxito, igual que antes.
+  * UI/UX 100% preservada: misma grilla `sm:grid-cols-2`, mismos labels en español, mismos placeholders, mismo DialogHeader con `AlertOctagon`, mismo footer con botones Cancelar/Registrar catástrofe con iconos `Loader2`/`Save`, misma nota de sugerencia MapPin. Inputs ahora con `id="incident-*"` y `Label htmlFor` en lugar de `FormLabel`.
+  * Export `IncidentFormDialog` mantiene exactamente la misma firma `({open, onOpenChange, onCreated})`. También se conserva el helper `IncidentFormTrigger`.
+- **Reescritura de `src/components/dashboard/fichas-panel.tsx` (1046 → 1012 líneas)**:
+  * Eliminados imports: `useForm`, `zodResolver`, `z`, y `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `FormDescription`.
+  * Eliminados los schemas `newFichaSchema` y `editFichaSchema` y sus tipos inferidos `NewFichaForm`/`EditFichaForm`.
+  * Añadidos imports: `Label` de `@/components/ui/label` y `IdCard` de `lucide-react` (este último fixa el bug latente de la línea 897 donde se renderizaba `<DetailRow icon={IdCard} .../>` sin importar el icono, ahora el RUT sí muestra su icono correcto en el diálogo de detalle).
+  * **`FichasPanel` (panel principal) — sin cambios**: tabla, filtros (comuna/riesgo/estado/buscar), uso de `useQuery`/`useQueryClient` con `queryKey` memoizado, `filteredFichas`, función `refresh()` que invalida `['fichas']`, toasts, contadores, label "Ley 19.628 · Datos sensibles", tooltips de necesidades (Ambulance/Pill/Accessibility), badges de riesgo/estado, skeletons durante carga. Todo idéntico.
+  * **`NewFichaDialog` reescrito**:
+    - `interface NewFichaState` con los 18 campos (fullName, rut, address, commune, lat, lng, phone, email, ageRange como `AgeRange | ''`, riskLevel, vulnerability, householdSize como string, hasPets, needsMedication, needsMobility, needsEvacuation, notes, assignedTo).
+    - Constante `NEW_FICHA_INITIAL` con los mismos defaults del `useForm` anterior.
+    - Estado `form` + `errors` (fullName, commune, ageRange, riskLevel, email).
+    - Helper `setField` genérico.
+    - Validación manual en `handleSubmit`: fullName no vacío, commune no vacío, ageRange presente, riskLevel presente, email (si viene) con regex simple `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`. Muestra `<p className="text-xs text-destructive">{error}</p>` debajo del input correspondiente (mismo efecto visual que `FormMessage`).
+    - Construye el body con conversiones correctas: lat/lng a `number | null` (con `Number.isFinite`), email vacío → `null`, ageRange vacío → `null`, householdSize a `Number(...) || 1` (cumple `z.number().int().positive().default(1)` del backend), strings vacíos → `null` para los opcionales.
+    - POST `/api/fichas`, toast success con el `created.code` (ej. `FIBER-2026-00013`), toast error con `error` o `issues[0].message` del backend, toast catch para error de red. Igual que antes.
+    - `resetForm()` limpia `form` y `errors` (equivalente a `form.reset()`). Se invoca al cerrar el dialog y tras crear exitosamente. `onCreated()` dispara el refresh del react-query.
+    - **Necesidades (checkboxes)**: grid 2x4 con `['needsEvacuation', 'needsMedication', 'needsMobility', 'hasPets']`, cada uno con `<input type="checkbox" id="ficha-{key}" className="h-4 w-4 rounded border-input">` + `<Label htmlFor="ficha-{key}" className="text-xs font-normal">` — mismo aspecto visual que el original (que usaba input nativo dentro de `FormControl`).
+    - Mismas descripciones (`FormDescription` → `<p className="text-[11px] text-muted-foreground">`) para notas ("Trazabilidad: AuditLog (Ley 19.628 art. 2).").
+    - Footer idéntico: Cancelar / Crear ficha con Loader2/Save.
+  * **`EditFichaDialog` reescrito**:
+    - `interface EditFichaState` con los 4 campos del original (riskLevel, status, assignedTo, notes).
+    - `buildEditState(ficha)` helper que genera el estado inicial desde la ficha seleccionada (reemplaza al `useForm({defaultValues})` + `useEffect(form.reset(...))`).
+    - Estado `form` (inicializado con `buildEditState(ficha)`) + `useEffect(() => setForm(buildEditState(ficha)), [ficha])` para resetear cuando cambia la ficha prop (mismo comportamiento que el `form.reset` dentro del useEffect de RHF).
+    - `handleSubmit` construye body con `assignedTo`/`notes` vacíos → `null`, hace PATCH `/api/fichas/${ficha.id}`, toast success con `${ficha.code} · ${riskLevelLabel(...)} · ${fichaStatusLabel(...)}`, toast error, invoca `onUpdated()`.
+    - Mantiene el panel de **solo lectura** con `DetailRow` (RUT con IdCard, dirección con MapPin, teléfono con Phone, email con Mail, edad y hogar con Users, vulnerabilidad con Accessibility) — ahora el icono de RUT SÍ aparece (bug fix).
+    - Mantiene Selects de riskLevel/status, Input de assignedTo, Textarea de notes con su descripción "Cambio registrado en AuditLog.", footer Cancelar/Guardar cambios.
+  * `DetailRow` helper sin cambios.
+- **Cero uso de react-hook-form/@hookform/zod** en ambos archivos: verificado con `grep -E "react-hook-form|@hookform|zod" src/components/dashboard/fichas-panel.tsx src/components/dashboard/incident-form.tsx` → sin coincidencias (exit 1).
+- **`bun run lint`** pasa limpio (exit 0, sin warnings ni errores).
+- **Contrato API preservado**: el body que envían los forms cumple exactamente con los schemas zod de `/api/incidents/route.ts`, `/api/fichas/route.ts` y `/api/fichas/[id]/route.ts` (todos los campos opcionales se envían como `null` si están vacíos; los numéricos se convierten con `Number(...)` y se valida con `Number.isFinite`; lat/lng pueden ser `null`; householdSize siempre ≥1; enums se envían como string y el backend los re-valida con `z.enum`).
+- **No se tocaron otros archivos**: no se modificaron `src/app/page.tsx`, rutas API, ni otros componentes. No se añadieron dependencias nuevas (`Label` ya existía en `src/components/ui/label.tsx`, `IdCard` ya existía en `lucide-react`).
+- **Beneficio memoria**: al eliminar `useForm`+`zodResolver`+`z` y los wrappers `Form*` (que internamente importan `zod`, `@hookform/resolvers` y ~12KB de runtime de RHF), el bundle del cliente para estos dos chunks debería reducirse significativamente, evitando el OOM-kill de Turbopack durante la compilación de la página `/`.
+
+Stage Summary:
+- **`incident-form.tsx`** y **`fichas-panel.tsx`** ahora son forms 100% controlados con `useState` + validación manual inline, sin dependencia de `react-hook-form`/`@hookform/resolvers`/`zod`.
+- **Misma UX**: mismos Dialogs, mismos Selects/Inputs/Textareas/Checkboxes/Labels, mismos placeholders y textos en español, mismos toasts sonner, mismas invalidaciones de react-query.
+- **Mismo contrato HTTP**: POST `/api/incidents`, POST `/api/fichas`, PATCH `/api/fichas/[id]` reciben bodies idénticos en forma a los que enviaba la versión con RHF+zod.
+- **Bug fix colateral**: el icono `IdCard` para la fila RUT en el diálogo de detalle de fichas ahora SÍ se importa y renderiza (antes estaba referenciado sin import y jamás aparecía).
+- **Lint**: 0 errores, 0 warnings.
+- **Verificación grep**: `grep -E "react-hook-form|@hookform|zod" src/components/dashboard/fichas-panel.tsx src/components/dashboard/incident-form.tsx` → sin output.
+- **Pendiente**: el orquestador debería reiniciar `bun run dev` para confirmar que Turbopack ahora compila `/` sin OOM (los cambios reducen el working set del bundler al no tener que empaquetar el runtime de zod + RHF en estos dos chunks).
+
+---
+Task ID: 4 (update)
+Agent: Main Orchestrator
+Task: Filtrar todo el dashboard para mostrar SOLO Viña del Mar (ninguna otra comuna)
+
+Work Log:
+- Mini-service (mini-services/alerts-service/index.ts):
+  * COMMUNES reducido a ['Viña del Mar'] (antes incluía Valparaíso, Concón, Quilpué, Villa Alemana)
+  * communeForCoord() ahora retorna siempre 'Viña del Mar'
+  * VINA_LAT_RANGE/LNG_RANGE ajustado al rango comunal de Viña del Mar (lat -33.005 a -33.055, lng -71.575 a -71.525)
+  * Descripción de guardiamarina actualizada (eliminada mención de Concón)
+- Seed (prisma/seed.ts):
+  * Todos los 15 INCIDENTS reubicados a comuna "Viña del Mar" con coords dentro del rango comunal
+  * Todas las 12 FICHAS reubicadas a comuna "Viña del Mar" con direcciones de Viña (Recreo, Achupallas, Marga-Marga, San Martín, etc.)
+  * Re-ejecutado `bun run db:seed` → BD ahora tiene 16 incidentes y 12 fichas TODOS con comuna="Viña del Mar" (verificado con groupBy)
+- Frontend:
+  * fichas-panel.tsx: COMMUNES reducido a ['Viña del Mar']
+  * incident-form.tsx: COMMUNES reducido a ['Viña del Mar']
+  * page.tsx: subtítulo cambiado de "Viña del Mar · Región de Valparaíso" a "Comuna de Viña del Mar"
+  * incident-map.tsx: DEFAULT_ZOOM 12 -> 13 para enfocar la comuna de Viña del Mar
+
+Optimizaciones de memoria (para que el bundle compile en el sandbox de 4GB):
+- charts-panel.tsx: removido recharts, reemplazado por donut+bar SVG nativo (mismo look, mucha menos memoria de compilación)
+- fichas-panel.tsx e incident-form.tsx: removido react-hook-form + @hookform/resolvers + zod, reemplazado por useState + validación manual simple (mismo UI/UX y API contract)
+- page.tsx: IncidentMap como único dynamic import (ssr:false); resto estático. Eliminado mountStage (ya no necesario con bundle ligero)
+
+Stage Summary:
+- DATOS: Confirmado en BD — 16 incidentes y 12 fichas, 100% comuna "Viña del Mar"
+- CÓDIGO: Todas las menciones de otras comunas (Valparaíso/Concón/Quilpué/Villa Alemana) eliminadas de filtros y textos
+- LINT: limpio (0 errores)
+- PROBLEMA DE INFRAESTRUCTURA: El sandbox (4GB RAM, cgroup) mata el proceso next-server de forma no determinística cuando recompila el bundle de Turbopack en frío. El dashboard funcionó al inicio de la sesión (caché .next preexistente), pero al modificar código y limpiar .next, la recompilación en frío consistentemente mata el proceso node (no OUM global registrado, posiblemente límite de cgroup o watchdog del sandbox). Las optimizaciones (eliminar recharts + react-hook-form) redujeron la carga pero el proceso sigue cayéndose intermitentemente. El código está correcto; el problema es de recursos del sandbox.
+- SERVICIOS: Ambos procesos (next dev puerto 3000, alerts-service WebSocket puerto 3003) reiniciados y corriendo.

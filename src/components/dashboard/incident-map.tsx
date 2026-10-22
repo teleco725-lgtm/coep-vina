@@ -38,7 +38,7 @@ import {
 } from '@/lib/severity';
 
 const VINA_CENTER: LatLngExpression = [-33.0245, -71.5517];
-const DEFAULT_ZOOM = 12;
+const DEFAULT_ZOOM = 13;
 
 // ---------------------------------------------------------------------------
 // Componente auxiliar: ajusta el mapa al bounds de los incidentes cuando

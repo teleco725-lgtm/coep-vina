@@ -52,7 +52,9 @@ import { IncidentFormDialog } from '@/components/dashboard/incident-form';
 import { useAlertsSocket } from '@/hooks/use-alerts-socket';
 import type { Incident } from '@/lib/types';
 
-// Leaflet must be client-side only — dynamic with ssr:false prevents SSR.
+// Leaflet/react-leaflet requieren `window`, por lo que el mapa se carga
+// como chunk dinamico (ssr:false). El resto de paneles son estaticos:
+// tras eliminar recharts y react-hook-form el bundle principal es ligero.
 const IncidentMap = dynamic(
   () =>
     import('@/components/dashboard/incident-map').then((m) => m.IncidentMap),
@@ -266,7 +268,7 @@ function Dashboard() {
                 CODEM-VDM · Centro de Operaciones de Emergencias
               </h1>
               <p className="text-[11px] text-muted-foreground">
-                Viña del Mar · Región de Valparaíso
+                Comuna de Viña del Mar
               </p>
             </div>
           </div>

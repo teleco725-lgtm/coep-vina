@@ -1,0 +1,1053 @@
+     1→'use client';
+     2→
+     3→import { useEffect, useMemo, useState } from 'react';
+     4→import { useForm } from 'react-hook-form';
+     5→import { zodResolver } from '@hookform/resolvers/zod';
+     6→import { z } from 'zod';
+     7→import { useQuery, useQueryClient } from '@tanstack/react-query';
+     8→import { toast } from 'sonner';
+     9→import {
+    10→  Users,
+    11→  Plus,
+    12→  Pill,
+    13→  Accessibility,
+    14→  Ambulance,
+    15→  Phone,
+    16→  Mail,
+    17→  MapPin,
+    18→  FileText,
+    19→  Loader2,
+    20→  Save,
+    21→  Search,
+    22→  RefreshCw,
+    23→} from 'lucide-react';
+    24→
+    25→import {
+    26→  Card,
+    27→  CardHeader,
+    28→  CardTitle,
+    29→  CardContent,
+    30→} from '@/components/ui/card';
+    31→import {
+    32→  Table,
+    33→  TableHeader,
+    34→  TableBody,
+    35→  TableRow,
+    36→  TableHead,
+    37→  TableCell,
+    38→} from '@/components/ui/table';
+    39→import { Button } from '@/components/ui/button';
+    40→import { Badge } from '@/components/ui/badge';
+    41→import {
+    42→  Select,
+    43→  SelectContent,
+    44→  SelectItem,
+    45→  SelectTrigger,
+    46→  SelectValue,
+    47→} from '@/components/ui/select';
+    48→import {
+    49→  Dialog,
+    50→  DialogContent,
+    51→  DialogHeader,
+    52→  DialogTitle,
+    53→  DialogDescription,
+    54→  DialogFooter,
+    55→} from '@/components/ui/dialog';
+    56→import {
+    57→  Form,
+    58→  FormField,
+    59→  FormItem,
+    60→  FormLabel,
+    61→  FormControl,
+    62→  FormMessage,
+    63→  FormDescription,
+    64→} from '@/components/ui/form';
+    65→import { Input } from '@/components/ui/input';
+    66→import { Textarea } from '@/components/ui/textarea';
+    67→import { Skeleton } from '@/components/ui/skeleton';
+    68→import {
+    69→  Tooltip,
+    70→  TooltipContent,
+    71→  TooltipTrigger,
+    72→} from '@/components/ui/tooltip';
+    73→
+    74→import type { FichaFIBER, RiskLevel, FichaStatus, AgeRange } from '@/lib/types';
+    75→import {
+    76→  riskLevelLabel,
+    77→  riskLevelBadgeClass,
+    78→  fichaStatusLabel,
+    79→} from '@/lib/severity';
+    80→
+    81→// ---------------------------------------------------------------------------
+    82→// Constants
+    83→// ---------------------------------------------------------------------------
+    84→const COMMUNES = [
+    85→  'Viña del Mar',
+    86→  'Valparaíso',
+    87→  'Concón',
+    88→  'Quilpué',
+    89→  'Villa Alemana',
+    90→] as const;
+    91→
+    92→const RISK_LEVELS: RiskLevel[] = ['critico', 'alto', 'medio', 'bajo'];
+    93→const STATUSES: FichaStatus[] = ['registrada', 'evaluada', 'derivada', 'cerrada'];
+    94→const AGE_RANGES: AgeRange[] = ['0-17', '18-29', '30-59', '60+'];
+    95→
+    96→const FILTER_ALL = '__all__';
+    97→
+    98→// ---------------------------------------------------------------------------
+    99→// Schemas (zod)
+   100→// ---------------------------------------------------------------------------
+   101→const newFichaSchema = z.object({
+   102→  fullName: z.string().min(1, 'Nombre obligatorio'),
+   103→  rut: z.string().optional().nullable(),
+   104→  address: z.string().optional().nullable(),
+   105→  commune: z.string().default('Viña del Mar'),
+   106→  lat: z.coerce.number().optional().nullable(),
+   107→  lng: z.coerce.number().optional().nullable(),
+   108→  phone: z.string().optional().nullable(),
+   109→  email: z.string().email('Email inválido').optional().nullable().or(z.literal('')),
+   110→  ageRange: z.enum(['0-17', '18-29', '30-59', '60+']).optional().nullable(),
+   111→  riskLevel: z.enum(['bajo', 'medio', 'alto', 'critico']).default('bajo'),
+   112→  vulnerability: z.string().optional().nullable(),
+   113→  householdSize: z.coerce.number().int().min(1, '≥1').default(1),
+   114→  hasPets: z.boolean().default(false),
+   115→  needsMedication: z.boolean().default(false),
+   116→  needsMobility: z.boolean().default(false),
+   117→  needsEvacuation: z.boolean().default(false),
+   118→  notes: z.string().optional().nullable(),
+   119→  assignedTo: z.string().optional().nullable(),
+   120→});
+   121→type NewFichaForm = z.infer<typeof newFichaSchema>;
+   122→
+   123→const editFichaSchema = z.object({
+   124→  riskLevel: z.enum(['bajo', 'medio', 'alto', 'critico']),
+   125→  status: z.enum(['registrada', 'evaluada', 'derivada', 'cerrada']),
+   126→  assignedTo: z.string().optional().nullable(),
+   127→  notes: z.string().optional().nullable(),
+   128→});
+   129→type EditFichaForm = z.infer<typeof editFichaSchema>;
+   130→
+   131→// ---------------------------------------------------------------------------
+   132→// Helpers
+   133→// ---------------------------------------------------------------------------
+   134→async function fetchFichas(
+   135→  filters: Record<string, string | undefined>,
+   136→): Promise<FichaFIBER[]> {
+   137→  const params = new URLSearchParams();
+   138→  for (const [k, v] of Object.entries(filters)) {
+   139→    if (v && v !== FILTER_ALL) params.set(k, v);
+   140→  }
+   141→  params.set('limit', '200');
+   142→  const res = await fetch(`/api/fichas?${params.toString()}`, {
+   143→    cache: 'no-store',
+   144→  });
+   145→  if (!res.ok) throw new Error('No se pudieron cargar las fichas');
+   146→  return (await res.json()) as FichaFIBER[];
+   147→}
+   148→
+   149→// ---------------------------------------------------------------------------
+   150→// Main panel
+   151→// ---------------------------------------------------------------------------
+   152→export function FichasPanel() {
+   153→  const queryClient = useQueryClient();
+   154→  const [communeFilter, setCommuneFilter] = useState<string>(FILTER_ALL);
+   155→  const [riskFilter, setRiskFilter] = useState<string>(FILTER_ALL);
+   156→  const [statusFilter, setStatusFilter] = useState<string>(FILTER_ALL);
+   157→  const [search, setSearch] = useState<string>('');
+   158→
+   159→  const [selected, setSelected] = useState<FichaFIBER | null>(null);
+   160→  const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
+   161→
+   162→  const queryKey = useMemo(
+   163→    () => ['fichas', { communeFilter, riskFilter, statusFilter }],
+   164→    [communeFilter, riskFilter, statusFilter],
+   165→  );
+   166→
+   167→  const { data: fichas = [], isLoading } = useQuery({
+   168→    queryKey,
+   169→    queryFn: () =>
+   170→      fetchFichas({
+   171→        commune: communeFilter,
+   172→        riskLevel: riskFilter,
+   173→        status: statusFilter,
+   174→      }),
+   175→    staleTime: 30_000,
+   176→  });
+   177→
+   178→  const filteredFichas = useMemo(() => {
+   179→    const q = search.trim().toLowerCase();
+   180→    if (!q) return fichas;
+   181→    return fichas.filter(
+   182→      (f) =>
+   183→        f.fullName.toLowerCase().includes(q) ||
+   184→        f.code.toLowerCase().includes(q) ||
+   185→        (f.rut ?? '').toLowerCase().includes(q) ||
+   186→        (f.address ?? '').toLowerCase().includes(q),
+   187→    );
+   188→  }, [fichas, search]);
+   189→
+   190→  const refresh = () => {
+   191→    void queryClient.invalidateQueries({ queryKey: ['fichas'] });
+   192→  };
+   193→
+   194→  return (
+   195→    <Card className="flex h-full flex-col gap-3 p-4">
+   196→      <CardHeader className="px-0 pt-0">
+   197→        <div className="flex flex-wrap items-center justify-between gap-2">
+   198→          <CardTitle className="flex items-center gap-2 text-base">
+   199→            <Users className="h-4 w-4 text-primary" />
+   200→            Fichas FIBER · Registro de Bienestar y Riesgo
+   201→          </CardTitle>
+   202→          <div className="flex items-center gap-2">
+   203→            <Button
+   204→              type="button"
+   205→              variant="outline"
+   206→              size="sm"
+   207→              onClick={refresh}
+   208→              aria-label="Refrescar fichas"
+   209→            >
+   210→              <RefreshCw className="h-3.5 w-3.5" />
+   211→              Refrescar
+   212→            </Button>
+   213→            <Button
+   214→              type="button"
+   215→              size="sm"
+   216→              onClick={() => setIsNewDialogOpen(true)}
+   217→            >
+   218→              <Plus className="h-3.5 w-3.5" />
+   219→              Nueva Ficha
+   220→            </Button>
+   221→          </div>
+   222→        </div>
+   223→      </CardHeader>
+   224→
+   225→      {/* Filters */}
+   226→      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+   227→        <div className="flex items-center gap-1.5 rounded-md border bg-background px-2">
+   228→          <Search className="h-3.5 w-3.5 text-muted-foreground" />
+   229→          <Input
+   230→            placeholder="Buscar nombre, RUT, dirección…"
+   231→            value={search}
+   232→            onChange={(e) => setSearch(e.target.value)}
+   233→            className="h-8 border-0 bg-transparent px-1 text-sm focus-visible:ring-0"
+   234→            aria-label="Buscar fichas"
+   235→          />
+   236→        </div>
+   237→        <Select value={communeFilter} onValueChange={setCommuneFilter}>
+   238→          <SelectTrigger className="h-8 w-full text-xs" size="sm">
+   239→            <SelectValue placeholder="Comuna" />
+   240→          </SelectTrigger>
+   241→          <SelectContent>
+   242→            <SelectItem value={FILTER_ALL}>Todas las comunas</SelectItem>
+   243→            {COMMUNES.map((c) => (
+   244→              <SelectItem key={c} value={c}>
+   245→                {c}
+   246→              </SelectItem>
+   247→            ))}
+   248→          </SelectContent>
+   249→        </Select>
+   250→        <Select value={riskFilter} onValueChange={setRiskFilter}>
+   251→          <SelectTrigger className="h-8 w-full text-xs" size="sm">
+   252→            <SelectValue placeholder="Riesgo" />
+   253→          </SelectTrigger>
+   254→          <SelectContent>
+   255→            <SelectItem value={FILTER_ALL}>Todo riesgo</SelectItem>
+   256→            {RISK_LEVELS.map((r) => (
+   257→              <SelectItem key={r} value={r}>
+   258→                {riskLevelLabel(r)}
+   259→              </SelectItem>
+   260→            ))}
+   261→          </SelectContent>
+   262→        </Select>
+   263→        <Select value={statusFilter} onValueChange={setStatusFilter}>
+   264→          <SelectTrigger className="h-8 w-full text-xs" size="sm">
+   265→            <SelectValue placeholder="Estado" />
+   266→          </SelectTrigger>
+   267→          <SelectContent>
+   268→            <SelectItem value={FILTER_ALL}>Todo estado</SelectItem>
+   269→            {STATUSES.map((s) => (
+   270→              <SelectItem key={s} value={s}>
+   271→                {fichaStatusLabel(s)}
+   272→              </SelectItem>
+   273→            ))}
+   274→          </SelectContent>
+   275→        </Select>
+   276→      </div>
+   277→
+   278→      {/* Table */}
+   279→      <CardContent className="max-h-96 overflow-y-auto p-0">
+   280→        <div className="rounded-md border">
+   281→          <Table>
+   282→            <TableHeader className="sticky top-0 z-10 bg-card">
+   283→              <TableRow>
+   284→                <TableHead>Código</TableHead>
+   285→                <TableHead>Nombre</TableHead>
+   286→                <TableHead className="hidden md:table-cell">Comuna</TableHead>
+   287→                <TableHead className="hidden md:table-cell">Edad</TableHead>
+   288→                <TableHead>Riesgo</TableHead>
+   289→                <TableHead className="hidden lg:table-cell">Estado</TableHead>
+   290→                <TableHead>Necesidades</TableHead>
+   291→              </TableRow>
+   292→            </TableHeader>
+   293→            <TableBody>
+   294→              {isLoading ? (
+   295→                Array.from({ length: 6 }).map((_, i) => (
+   296→                  <TableRow key={`sk-${i}`}>
+   297→                    <TableCell colSpan={7}>
+   298→                      <Skeleton className="h-6 w-full" />
+   299→                    </TableCell>
+   300→                  </TableRow>
+   301→                ))
+   302→              ) : filteredFichas.length === 0 ? (
+   303→                <TableRow>
+   304→                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+   305→                    No se encontraron fichas con los filtros actuales.
+   306→                  </TableCell>
+   307→                </TableRow>
+   308→              ) : (
+   309→                filteredFichas.map((f) => (
+   310→                  <TableRow
+   311→                    key={f.id}
+   312→                    onClick={() => setSelected(f)}
+   313→                    className="cursor-pointer"
+   314→                  >
+   315→                    <TableCell className="font-mono text-xs">{f.code}</TableCell>
+   316→                    <TableCell className="font-medium">{f.fullName}</TableCell>
+   317→                    <TableCell className="hidden md:table-cell text-muted-foreground">
+   318→                      {f.commune}
+   319→                    </TableCell>
+   320→                    <TableCell className="hidden md:table-cell text-muted-foreground">
+   321→                      {f.ageRange ?? '—'}
+   322→                    </TableCell>
+   323→                    <TableCell>
+   324→                      <Badge className={`${riskLevelBadgeClass(f.riskLevel)} text-[10px]`}>
+   325→                        {riskLevelLabel(f.riskLevel)}
+   326→                      </Badge>
+   327→                    </TableCell>
+   328→                    <TableCell className="hidden lg:table-cell">
+   329→                      <Badge variant="outline" className="text-[10px]">
+   330→                        {fichaStatusLabel(f.status)}
+   331→                      </Badge>
+   332→                    </TableCell>
+   333→                    <TableCell>
+   334→                      <div className="flex items-center gap-1.5">
+   335→                        {f.needsEvacuation && (
+   336→                          <Tooltip>
+   337→                            <TooltipTrigger asChild>
+   338→                              <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-sev-critical/10 text-sev-critical">
+   339→                                <Ambulance className="h-3.5 w-3.5" />
+   340→                              </span>
+   341→                            </TooltipTrigger>
+   342→                            <TooltipContent>Requiere evacuación</TooltipContent>
+   343→                          </Tooltip>
+   344→                        )}
+   345→                        {f.needsMedication && (
+   346→                          <Tooltip>
+   347→                            <TooltipTrigger asChild>
+   348→                              <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-sev-warning/10 text-sev-warning">
+   349→                                <Pill className="h-3.5 w-3.5" />
+   350→                              </span>
+   351→                            </TooltipTrigger>
+   352→                            <TooltipContent>Requiere medicación</TooltipContent>
+   353→                          </Tooltip>
+   354→                        )}
+   355→                        {f.needsMobility && (
+   356→                          <Tooltip>
+   357→                            <TooltipTrigger asChild>
+   358→                              <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-sev-watch/20 text-sev-watch">
+   359→                                <Accessibility className="h-3.5 w-3.5" />
+   360→                              </span>
+   361→                            </TooltipTrigger>
+   362→                            <TooltipContent>Movilidad reducida</TooltipContent>
+   363→                          </Tooltip>
+   364→                        )}
+   365→                        {!f.needsEvacuation &&
+   366→                          !f.needsMedication &&
+   367→                          !f.needsMobility && (
+   368→                            <span className="text-xs text-muted-foreground">—</span>
+   369→                          )}
+   370→                      </div>
+   371→                    </TableCell>
+   372→                  </TableRow>
+   373→                ))
+   374→              )}
+   375→            </TableBody>
+   376→          </Table>
+   377→        </div>
+   378→      </CardContent>
+   379→
+   380→      <div className="flex items-center justify-between text-xs text-muted-foreground">
+   381→        <span>
+   382→          Mostrando <strong className="tabular-nums">{filteredFichas.length}</strong>{' '}
+   383→          de <strong className="tabular-nums">{fichas.length}</strong> fichas
+   384→        </span>
+   385→        <span>Ley 19.628 · Datos sensibles</span>
+   386→      </div>
+   387→
+   388→      {/* Edit dialog */}
+   389→      {selected && (
+   390→        <EditFichaDialog
+   391→          ficha={selected}
+   392→          onClose={() => setSelected(null)}
+   393→          onUpdated={() => {
+   394→            setSelected(null);
+   395→            refresh();
+   396→          }}
+   397→        />
+   398→      )}
+   399→
+   400→      {/* New dialog */}
+   401→      <NewFichaDialog
+   402→        open={isNewDialogOpen}
+   403→        onOpenChange={setIsNewDialogOpen}
+   404→        onCreated={() => {
+   405→          setIsNewDialogOpen(false);
+   406→          refresh();
+   407→        }}
+   408→      />
+   409→    </Card>
+   410→  );
+   411→}
+   412→
+   413→// ---------------------------------------------------------------------------
+   414→// New ficha dialog (react-hook-form + zod)
+   415→// ---------------------------------------------------------------------------
+   416→function NewFichaDialog({
+   417→  open,
+   418→  onOpenChange,
+   419→  onCreated,
+   420→}: {
+   421→  open: boolean;
+   422→  onOpenChange: (v: boolean) => void;
+   423→  onCreated: () => void;
+   424→}) {
+   425→  const [submitting, setSubmitting] = useState(false);
+   426→  const form = useForm<NewFichaForm>({
+   427→    resolver: zodResolver(newFichaSchema),
+   428→    defaultValues: {
+   429→      fullName: '',
+   430→      rut: '',
+   431→      address: '',
+   432→      commune: 'Viña del Mar',
+   433→      lat: null,
+   434→      lng: null,
+   435→      phone: '',
+   436→      email: '',
+   437→      ageRange: null,
+   438→      riskLevel: 'bajo',
+   439→      vulnerability: '',
+   440→      householdSize: 1,
+   441→      hasPets: false,
+   442→      needsMedication: false,
+   443→      needsMobility: false,
+   444→      needsEvacuation: false,
+   445→      notes: '',
+   446→      assignedTo: '',
+   447→    },
+   448→  });
+   449→
+   450→  const onSubmit = async (values: NewFichaForm) => {
+   451→    setSubmitting(true);
+   452→    try {
+   453→      const body = {
+   454→        ...values,
+   455→        email: values.email === '' ? null : values.email,
+   456→        lat: values.lat === null || Number.isNaN(values.lat as number) ? null : values.lat,
+   457→        lng: values.lng === null || Number.isNaN(values.lng as number) ? null : values.lng,
+   458→      };
+   459→      const res = await fetch('/api/fichas', {
+   460→        method: 'POST',
+   461→        headers: { 'Content-Type': 'application/json' },
+   462→        body: JSON.stringify(body),
+   463→      });
+   464→      if (!res.ok) {
+   465→        const err = (await res.json().catch(() => null)) as {
+   466→          error?: string;
+   467→          issues?: { message: string }[];
+   468→        } | null;
+   469→        const msg =
+   470→          err?.error ??
+   471→          err?.issues?.[0]?.message ??
+   472→          'No se pudo crear la ficha.';
+   473→        toast.error('Error al crear ficha', { description: msg });
+   474→        return;
+   475→      }
+   476→      const created = (await res.json()) as FichaFIBER;
+   477→      toast.success('Ficha creada', {
+   478→        description: `Código ${created.code}`,
+   479→      });
+   480→      form.reset();
+   481→      onCreated();
+   482→    } catch {
+   483→      toast.error('Error de red al crear la ficha.');
+   484→    } finally {
+   485→      setSubmitting(false);
+   486→    }
+   487→  };
+   488→
+   489→  return (
+   490→    <Dialog open={open} onOpenChange={onOpenChange}>
+   491→      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+   492→        <DialogHeader>
+   493→          <DialogTitle>Nueva Ficha FIBER</DialogTitle>
+   494→          <DialogDescription>
+   495→            Registro individual de bienestar y riesgo. Datos sensibles bajo Ley
+   496→            19.628 — requiere consentimiento informado del titular.
+   497→          </DialogDescription>
+   498→        </DialogHeader>
+   499→
+   500→        <Form {...form}>
+   501→          <form
+   502→            onSubmit={form.handleSubmit(onSubmit)}
+   503→            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+   504→          >
+   505→            <FormField
+   506→              control={form.control}
+   507→              name="fullName"
+   508→              render={({ field }) => (
+   509→                <FormItem className="sm:col-span-2">
+   510→                  <FormLabel>Nombre completo *</FormLabel>
+   511→                  <FormControl>
+   512→                    <Input placeholder="Ej. María González Pérez" {...field} />
+   513→                  </FormControl>
+   514→                  <FormMessage />
+   515→                </FormItem>
+   516→              )}
+   517→            />
+   518→            <FormField
+   519→              control={form.control}
+   520→              name="rut"
+   521→              render={({ field }) => (
+   522→                <FormItem>
+   523→                  <FormLabel>RUT</FormLabel>
+   524→                  <FormControl>
+   525→                    <Input placeholder="12.345.678-9" {...field} />
+   526→                  </FormControl>
+   527→                  <FormMessage />
+   528→                </FormItem>
+   529→              )}
+   530→            />
+   531→            <FormField
+   532→              control={form.control}
+   533→              name="ageRange"
+   534→              render={({ field }) => (
+   535→                <FormItem>
+   536→                  <FormLabel>Rango etario</FormLabel>
+   537→                  <Select
+   538→                    onValueChange={(v) => field.onChange(v as AgeRange)}
+   539→                    value={field.value ?? undefined}
+   540→                  >
+   541→                    <FormControl>
+   542→                      <SelectTrigger className="w-full">
+   543→                        <SelectValue placeholder="Selecciona…" />
+   544→                      </SelectTrigger>
+   545→                    </FormControl>
+   546→                    <SelectContent>
+   547→                      {AGE_RANGES.map((r) => (
+   548→                        <SelectItem key={r} value={r}>
+   549→                          {r} años
+   550→                        </SelectItem>
+   551→                      ))}
+   552→                    </SelectContent>
+   553→                  </Select>
+   554→                  <FormMessage />
+   555→                </FormItem>
+   556→              )}
+   557→            />
+   558→            <FormField
+   559→              control={form.control}
+   560→              name="address"
+   561→              render={({ field }) => (
+   562→                <FormItem className="sm:col-span-2">
+   563→                  <FormLabel>Dirección</FormLabel>
+   564→                  <FormControl>
+   565→                    <Input
+   566→                      placeholder="Calle, número, sector"
+   567→                      {...field}
+   568→                    />
+   569→                  </FormControl>
+   570→                  <FormMessage />
+   571→                </FormItem>
+   572→              )}
+   573→            />
+   574→            <FormField
+   575→              control={form.control}
+   576→              name="commune"
+   577→              render={({ field }) => (
+   578→                <FormItem>
+   579→                  <FormLabel>Comuna</FormLabel>
+   580→                  <Select onValueChange={field.onChange} value={field.value}>
+   581→                    <FormControl>
+   582→                      <SelectTrigger className="w-full">
+   583→                        <SelectValue />
+   584→                      </SelectTrigger>
+   585→                    </FormControl>
+   586→                    <SelectContent>
+   587→                      {COMMUNES.map((c) => (
+   588→                        <SelectItem key={c} value={c}>
+   589→                          {c}
+   590→                        </SelectItem>
+   591→                      ))}
+   592→                    </SelectContent>
+   593→                  </Select>
+   594→                  <FormMessage />
+   595→                </FormItem>
+   596→              )}
+   597→            />
+   598→            <FormField
+   599→              control={form.control}
+   600→              name="riskLevel"
+   601→              render={({ field }) => (
+   602→                <FormItem>
+   603→                  <FormLabel>Nivel de riesgo</FormLabel>
+   604→                  <Select
+   605→                    onValueChange={field.onChange}
+   606→                    value={field.value}
+   607→                  >
+   608→                    <FormControl>
+   609→                      <SelectTrigger className="w-full">
+   610→                        <SelectValue />
+   611→                      </SelectTrigger>
+   612→                    </FormControl>
+   613→                    <SelectContent>
+   614→                      {RISK_LEVELS.map((r) => (
+   615→                        <SelectItem key={r} value={r}>
+   616→                          {riskLevelLabel(r)}
+   617→                        </SelectItem>
+   618→                      ))}
+   619→                    </SelectContent>
+   620→                  </Select>
+   621→                  <FormMessage />
+   622→                </FormItem>
+   623→              )}
+   624→            />
+   625→            <FormField
+   626→              control={form.control}
+   627→              name="lat"
+   628→              render={({ field }) => (
+   629→                <FormItem>
+   630→                  <FormLabel>Latitud</FormLabel>
+   631→                  <FormControl>
+   632→                    <Input
+   633→                      type="number"
+   634→                      step="any"
+   635→                      placeholder="-33.0245"
+   636→                      {...field}
+   637→                      value={field.value ?? ''}
+   638→                    />
+   639→                  </FormControl>
+   640→                  <FormMessage />
+   641→                </FormItem>
+   642→              )}
+   643→            />
+   644→            <FormField
+   645→              control={form.control}
+   646→              name="lng"
+   647→              render={({ field }) => (
+   648→                <FormItem>
+   649→                  <FormLabel>Longitud</FormLabel>
+   650→                  <FormControl>
+   651→                    <Input
+   652→                      type="number"
+   653→                      step="any"
+   654→                      placeholder="-71.5517"
+   655→                      {...field}
+   656→                      value={field.value ?? ''}
+   657→                    />
+   658→                  </FormControl>
+   659→                  <FormMessage />
+   660→                </FormItem>
+   661→              )}
+   662→            />
+   663→            <FormField
+   664→              control={form.control}
+   665→              name="phone"
+   666→              render={({ field }) => (
+   667→                <FormItem>
+   668→                  <FormLabel>Teléfono</FormLabel>
+   669→                  <FormControl>
+   670→                    <Input placeholder="+56 32 …" {...field} />
+   671→                  </FormControl>
+   672→                  <FormMessage />
+   673→                </FormItem>
+   674→              )}
+   675→            />
+   676→            <FormField
+   677→              control={form.control}
+   678→              name="email"
+   679→              render={({ field }) => (
+   680→                <FormItem>
+   681→                  <FormLabel>Email</FormLabel>
+   682→                  <FormControl>
+   683→                    <Input
+   684→                      type="email"
+   685→                      placeholder="correo@dominio.cl"
+   686→                      {...field}
+   687→                    />
+   688→                  </FormControl>
+   689→                  <FormMessage />
+   690→                </FormItem>
+   691→              )}
+   692→            />
+   693→            <FormField
+   694→              control={form.control}
+   695→              name="householdSize"
+   696→              render={({ field }) => (
+   697→                <FormItem>
+   698→                  <FormLabel>Tamaño hogar</FormLabel>
+   699→                  <FormControl>
+   700→                    <Input type="number" min={1} step={1} {...field} />
+   701→                  </FormControl>
+   702→                  <FormMessage />
+   703→                </FormItem>
+   704→              )}
+   705→            />
+   706→            <FormField
+   707→              control={form.control}
+   708→              name="vulnerability"
+   709→              render={({ field }) => (
+   710→                <FormItem className="sm:col-span-2">
+   711→                  <FormLabel>Vulnerabilidad</FormLabel>
+   712→                  <FormControl>
+   713→                    <Input
+   714→                      placeholder="Movilidad reducida, salud crónica, …"
+   715→                      {...field}
+   716→                    />
+   717→                  </FormControl>
+   718→                  <FormMessage />
+   719→                </FormItem>
+   720→              )}
+   721→            />
+   722→            <FormField
+   723→              control={form.control}
+   724→              name="assignedTo"
+   725→              render={({ field }) => (
+   726→                <FormItem className="sm:col-span-2">
+   727→                  <FormLabel>Asignado a</FormLabel>
+   728→                  <FormControl>
+   729→                    <Input
+   730→                      placeholder="Profesional responsable"
+   731→                      {...field}
+   732→                    />
+   733→                  </FormControl>
+   734→                  <FormMessage />
+   735→                </FormItem>
+   736→              )}
+   737→            />
+   738→
+   739→            {/* Boolean needs */}
+   740→            <div className="grid grid-cols-2 gap-2 sm:col-span-2">
+   741→              {(
+   742→                [
+   743→                  ['needsEvacuation', 'Requiere evacuación'],
+   744→                  ['needsMedication', 'Requiere medicación'],
+   745→                  ['needsMobility', 'Movilidad reducida'],
+   746→                  ['hasPets', 'Tiene mascotas'],
+   747→                ] as const
+   748→              ).map(([key, label]) => (
+   749→                <FormField
+   750→                  key={key}
+   751→                  control={form.control}
+   752→                  name={key}
+   753→                  render={({ field }) => (
+   754→                    <FormItem className="flex flex-row items-center gap-2 space-y-0">
+   755→                      <FormControl>
+   756→                        <input
+   757→                          type="checkbox"
+   758→                          checked={field.value as boolean}
+   759→                          onChange={(e) => field.onChange(e.target.checked)}
+   760→                          className="h-4 w-4 rounded border-input"
+   761→                        />
+   762→                      </FormControl>
+   763→                      <FormLabel className="text-xs font-normal">
+   764→                        {label}
+   765→                      </FormLabel>
+   766→                    </FormItem>
+   767→                  )}
+   768→                />
+   769→              ))}
+   770→            </div>
+   771→
+   772→            <FormField
+   773→              control={form.control}
+   774→              name="notes"
+   775→              render={({ field }) => (
+   776→                <FormItem className="sm:col-span-2">
+   777→                  <FormLabel>Notas</FormLabel>
+   778→                  <FormControl>
+   779→                    <Textarea
+   780→                      placeholder="Observaciones, antecedentes relevantes…"
+   781→                      rows={3}
+   782→                      {...field}
+   783→                    />
+   784→                  </FormControl>
+   785→                  <FormDescription>
+   786→                    Trazabilidad: AuditLog (Ley 19.628 art. 2).
+   787→                  </FormDescription>
+   788→                  <FormMessage />
+   789→                </FormItem>
+   790→              )}
+   791→            />
+   792→
+   793→            <DialogFooter className="sm:col-span-2">
+   794→              <Button
+   795→                type="button"
+   796→                variant="outline"
+   797→                onClick={() => onOpenChange(false)}
+   798→                disabled={submitting}
+   799→              >
+   800→                Cancelar
+   801→              </Button>
+   802→              <Button type="submit" disabled={submitting}>
+   803→                {submitting ? (
+   804→                  <Loader2 className="h-4 w-4 animate-spin" />
+   805→                ) : (
+   806→                  <Save className="h-4 w-4" />
+   807→                )}
+   808→                Crear ficha
+   809→              </Button>
+   810→            </DialogFooter>
+   811→          </form>
+   812→        </Form>
+   813→      </DialogContent>
+   814→    </Dialog>
+   815→  );
+   816→}
+   817→
+   818→// ---------------------------------------------------------------------------
+   819→// Edit ficha dialog (PATCH)
+   820→// ---------------------------------------------------------------------------
+   821→function EditFichaDialog({
+   822→  ficha,
+   823→  onClose,
+   824→  onUpdated,
+   825→}: {
+   826→  ficha: FichaFIBER;
+   827→  onClose: () => void;
+   828→  onUpdated: () => void;
+   829→}) {
+   830→  const [submitting, setSubmitting] = useState(false);
+   831→  const form = useForm<EditFichaForm>({
+   832→    resolver: zodResolver(editFichaSchema),
+   833→    defaultValues: {
+   834→      riskLevel: ficha.riskLevel,
+   835→      status: ficha.status,
+   836→      assignedTo: ficha.assignedTo ?? '',
+   837→      notes: ficha.notes ?? '',
+   838→    },
+   839→  });
+   840→
+   841→  // Reset form when ficha changes
+   842→  useEffect(() => {
+   843→    form.reset({
+   844→      riskLevel: ficha.riskLevel,
+   845→      status: ficha.status,
+   846→      assignedTo: ficha.assignedTo ?? '',
+   847→      notes: ficha.notes ?? '',
+   848→    });
+   849→  }, [ficha, form]);
+   850→
+   851→  const onSubmit = async (values: EditFichaForm) => {
+   852→    setSubmitting(true);
+   853→    try {
+   854→      const body = {
+   855→        riskLevel: values.riskLevel,
+   856→        status: values.status,
+   857→        assignedTo: values.assignedTo || null,
+   858→        notes: values.notes || null,
+   859→      };
+   860→      const res = await fetch(`/api/fichas/${ficha.id}`, {
+   861→        method: 'PATCH',
+   862→        headers: { 'Content-Type': 'application/json' },
+   863→        body: JSON.stringify(body),
+   864→      });
+   865→      if (!res.ok) {
+   866→        const err = (await res.json().catch(() => null)) as {
+   867→          error?: string;
+   868→        } | null;
+   869→        toast.error('Error al actualizar', {
+   870→          description: err?.error ?? 'Intenta de nuevo.',
+   871→        });
+   872→        return;
+   873→      }
+   874→      toast.success('Ficha actualizada', {
+   875→        description: `${ficha.code} · ${riskLevelLabel(values.riskLevel)} · ${fichaStatusLabel(
+   876→          values.status,
+   877→        )}`,
+   878→      });
+   879→      onUpdated();
+   880→    } catch {
+   881→      toast.error('Error de red al actualizar.');
+   882→    } finally {
+   883→      setSubmitting(false);
+   884→    }
+   885→  };
+   886→
+   887→  return (
+   888→    <Dialog open onOpenChange={(v) => !v && onClose()}>
+   889→      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+   890→        <DialogHeader>
+   891→          <DialogTitle className="flex items-center gap-2">
+   892→            <FileText className="h-4 w-4 text-primary" />
+   893→            {ficha.code}
+   894→          </DialogTitle>
+   895→          <DialogDescription>
+   896→            {ficha.fullName} · {ficha.commune}
+   897→          </DialogDescription>
+   898→        </DialogHeader>
+   899→
+   900→        {/* Read-only detail */}
+   901→        <div className="grid grid-cols-1 gap-2 rounded-md border bg-muted/30 p-3 text-xs sm:grid-cols-2">
+   902→          {ficha.rut && (
+   903→            <DetailRow icon={IdCard} label="RUT" value={ficha.rut} />
+   904→          )}
+   905→          {ficha.address && (
+   906→            <DetailRow icon={MapPin} label="Dirección" value={`${ficha.address}, ${ficha.commune}`} />
+   907→          )}
+   908→          {ficha.phone && (
+   909→            <DetailRow icon={Phone} label="Teléfono" value={ficha.phone} />
+   910→          )}
+   911→          {ficha.email && (
+   912→            <DetailRow icon={Mail} label="Email" value={ficha.email} />
+   913→          )}
+   914→          {ficha.ageRange && (
+   915→            <DetailRow icon={Users} label="Edad" value={`${ficha.ageRange} años`} />
+   916→          )}
+   917→          <DetailRow
+   918→            icon={Users}
+   919→            label="Hogar"
+   920→            value={`${ficha.householdSize} personas`}
+   921→          />
+   922→          {ficha.vulnerability && (
+   923→            <DetailRow icon={Accessibility} label="Vulnerabilidad" value={ficha.vulnerability} />
+   924→          )}
+   925→        </div>
+   926→
+   927→        <Form {...form}>
+   928→          <form
+   929→            onSubmit={form.handleSubmit(onSubmit)}
+   930→            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+   931→          >
+   932→            <FormField
+   933→              control={form.control}
+   934→              name="riskLevel"
+   935→              render={({ field }) => (
+   936→                <FormItem>
+   937→                  <FormLabel>Nivel de riesgo</FormLabel>
+   938→                  <Select onValueChange={field.onChange} value={field.value}>
+   939→                    <FormControl>
+   940→                      <SelectTrigger className="w-full">
+   941→                        <SelectValue />
+   942→                      </SelectTrigger>
+   943→                    </FormControl>
+   944→                    <SelectContent>
+   945→                      {RISK_LEVELS.map((r) => (
+   946→                        <SelectItem key={r} value={r}>
+   947→                          {riskLevelLabel(r)}
+   948→                        </SelectItem>
+   949→                      ))}
+   950→                    </SelectContent>
+   951→                  </Select>
+   952→                  <FormMessage />
+   953→                </FormItem>
+   954→              )}
+   955→            />
+   956→            <FormField
+   957→              control={form.control}
+   958→              name="status"
+   959→              render={({ field }) => (
+   960→                <FormItem>
+   961→                  <FormLabel>Estado</FormLabel>
+   962→                  <Select onValueChange={field.onChange} value={field.value}>
+   963→                    <FormControl>
+   964→                      <SelectTrigger className="w-full">
+   965→                        <SelectValue />
+   966→                      </SelectTrigger>
+   967→                    </FormControl>
+   968→                    <SelectContent>
+   969→                      {STATUSES.map((s) => (
+   970→                        <SelectItem key={s} value={s}>
+   971→                          {fichaStatusLabel(s)}
+   972→                        </SelectItem>
+   973→                      ))}
+   974→                    </SelectContent>
+   975→                  </Select>
+   976→                  <FormMessage />
+   977→                </FormItem>
+   978→              )}
+   979→            />
+   980→            <FormField
+   981→              control={form.control}
+   982→              name="assignedTo"
+   983→              render={({ field }) => (
+   984→                <FormItem className="sm:col-span-2">
+   985→                  <FormLabel>Asignado a</FormLabel>
+   986→                  <FormControl>
+   987→                    <Input
+   988→                      placeholder="Profesional responsable"
+   989→                      {...field}
+   990→                    />
+   991→                  </FormControl>
+   992→                  <FormMessage />
+   993→                </FormItem>
+   994→              )}
+   995→            />
+   996→            <FormField
+   997→              control={form.control}
+   998→              name="notes"
+   999→              render={({ field }) => (
+  1000→                <FormItem className="sm:col-span-2">
+  1001→                  <FormLabel>Notas</FormLabel>
+  1002→                  <FormControl>
+  1003→                    <Textarea rows={3} {...field} />
+  1004→                  </FormControl>
+  1005→                  <FormDescription>
+  1006→                    Cambio registrado en AuditLog.
+  1007→                  </FormDescription>
+  1008→                  <FormMessage />
+  1009→                </FormItem>
+  1010→              )}
+  1011→            />
+  1012→            <DialogFooter className="sm:col-span-2">
+  1013→              <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
+  1014→                Cancelar
+  1015→              </Button>
+  1016→              <Button type="submit" disabled={submitting}>
+  1017→                {submitting ? (
+  1018→                  <Loader2 className="h-4 w-4 animate-spin" />
+  1019→                ) : (
+  1020→                  <Save className="h-4 w-4" />
+  1021→                )}
+  1022→                Guardar cambios
+  1023→              </Button>
+  1024→            </DialogFooter>
+  1025→          </form>
+  1026→        </Form>
+  1027→      </DialogContent>
+  1028→    </Dialog>
+  1029→  );
+  1030→}
+  1031→
+  1032→function DetailRow({
+  1033→  icon: Icon,
+  1034→  label,
+  1035→  value,
+  1036→}: {
+  1037→  icon: React.ComponentType<{ className?: string }>;
+  1038→  label: string;
+  1039→  value: string;
+  1040→}) {
+  1041→  return (
+  1042→    <div className="flex items-start gap-2">
+  1043→      <Icon className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
+  1044→      <div className="flex flex-col">
+  1045→        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+  1046→          {label}
+  1047→        </span>
+  1048→        <span className="text-foreground">{value}</span>
+  1049→      </div>
+  1050→    </div>
+  1051→  );
+  1052→}
+  1053→

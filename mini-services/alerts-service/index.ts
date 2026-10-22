@@ -63,12 +63,13 @@ type SourceCode = 'senapred' | 'conaf' | 'shoa' | 'guardiamarina' | 'cbv2' | 'ca
 // ============================================================================
 const PORT = 3003
 
-// Viña del Mar center ~ -33.0245, -71.5517
+// Viña del Mar (comuna) center ~ -33.0245, -71.5517
+// Se restringe a la comuna de Viña del Mar ÚNICAMENTE (sin Valparaíso/Concón/etc.)
 const VINA_CENTER = { lat: -33.0245, lng: -71.5517 }
-const VINA_LAT_RANGE = { min: -33.06, max: -33.02 }
-const VINA_LNG_RANGE = { min: -71.62, max: -71.50 }
+const VINA_LAT_RANGE = { min: -33.055, max: -33.005 }
+const VINA_LNG_RANGE = { min: -71.575, max: -71.525 }
 
-const COMMUNES = ['Viña del Mar', 'Valparaíso', 'Concón', 'Quilpué', 'Villa Alemana'] as const
+const COMMUNES = ['Viña del Mar'] as const
 
 const SOURCE_NAMES: Record<SourceCode, string> = {
   senapred: 'SENAPRED - Servicio Nacional de Prevención y Respuesta ante Desastres',
@@ -118,12 +119,8 @@ function randCoord(): { lat: number; lng: number } {
   }
 }
 function communeForCoord(): string {
-  const r = Math.random()
-  if (r < 0.55) return 'Viña del Mar'
-  if (r < 0.75) return 'Valparaíso'
-  if (r < 0.85) return 'Concón'
-  if (r < 0.93) return 'Quilpué'
-  return 'Villa Alemana'
+  // Solo comuna de Viña del Mar (sin Valparaíso/Concón/Quilpué/Villa Alemana)
+  return 'Viña del Mar'
 }
 function makeExternalId(prefix: string): string {
   const year = new Date().getFullYear()

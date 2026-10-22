@@ -1,9 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -20,6 +17,7 @@ import {
   Save,
   Search,
   RefreshCw,
+  IdCard,
 } from 'lucide-react';
 
 import {
@@ -53,17 +51,9 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import {
-  Form,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormMessage,
-  FormDescription,
-} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Tooltip,
@@ -81,52 +71,13 @@ import {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const COMMUNES = [
-  'Viña del Mar',
-  'Valparaíso',
-  'Concón',
-  'Quilpué',
-  'Villa Alemana',
-] as const;
+const COMMUNES = ['Viña del Mar'] as const;
 
 const RISK_LEVELS: RiskLevel[] = ['critico', 'alto', 'medio', 'bajo'];
 const STATUSES: FichaStatus[] = ['registrada', 'evaluada', 'derivada', 'cerrada'];
 const AGE_RANGES: AgeRange[] = ['0-17', '18-29', '30-59', '60+'];
 
 const FILTER_ALL = '__all__';
-
-// ---------------------------------------------------------------------------
-// Schemas (zod)
-// ---------------------------------------------------------------------------
-const newFichaSchema = z.object({
-  fullName: z.string().min(1, 'Nombre obligatorio'),
-  rut: z.string().optional().nullable(),
-  address: z.string().optional().nullable(),
-  commune: z.string().default('Viña del Mar'),
-  lat: z.coerce.number().optional().nullable(),
-  lng: z.coerce.number().optional().nullable(),
-  phone: z.string().optional().nullable(),
-  email: z.string().email('Email inválido').optional().nullable().or(z.literal('')),
-  ageRange: z.enum(['0-17', '18-29', '30-59', '60+']).optional().nullable(),
-  riskLevel: z.enum(['bajo', 'medio', 'alto', 'critico']).default('bajo'),
-  vulnerability: z.string().optional().nullable(),
-  householdSize: z.coerce.number().int().min(1, '≥1').default(1),
-  hasPets: z.boolean().default(false),
-  needsMedication: z.boolean().default(false),
-  needsMobility: z.boolean().default(false),
-  needsEvacuation: z.boolean().default(false),
-  notes: z.string().optional().nullable(),
-  assignedTo: z.string().optional().nullable(),
-});
-type NewFichaForm = z.infer<typeof newFichaSchema>;
-
-const editFichaSchema = z.object({
-  riskLevel: z.enum(['bajo', 'medio', 'alto', 'critico']),
-  status: z.enum(['registrada', 'evaluada', 'derivada', 'cerrada']),
-  assignedTo: z.string().optional().nullable(),
-  notes: z.string().optional().nullable(),
-});
-type EditFichaForm = z.infer<typeof editFichaSchema>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -411,8 +362,50 @@ export function FichasPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// New ficha dialog (react-hook-form + zod)
+// New ficha dialog (plain useState controlled form)
 // ---------------------------------------------------------------------------
+interface NewFichaState {
+  fullName: string;
+  rut: string;
+  address: string;
+  commune: string;
+  lat: string;
+  lng: string;
+  phone: string;
+  email: string;
+  ageRange: AgeRange | '';
+  riskLevel: RiskLevel;
+  vulnerability: string;
+  householdSize: string;
+  hasPets: boolean;
+  needsMedication: boolean;
+  needsMobility: boolean;
+  needsEvacuation: boolean;
+  notes: string;
+  assignedTo: string;
+}
+
+const NEW_FICHA_INITIAL: NewFichaState = {
+  fullName: '',
+  rut: '',
+  address: '',
+  commune: 'Viña del Mar',
+  lat: '',
+  lng: '',
+  phone: '',
+  email: '',
+  ageRange: '',
+  riskLevel: 'bajo',
+  vulnerability: '',
+  householdSize: '1',
+  hasPets: false,
+  needsMedication: false,
+  needsMobility: false,
+  needsEvacuation: false,
+  notes: '',
+  assignedTo: '',
+};
+
 function NewFichaDialog({
   open,
   onOpenChange,
@@ -423,38 +416,77 @@ function NewFichaDialog({
   onCreated: () => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
-  const form = useForm<NewFichaForm>({
-    resolver: zodResolver(newFichaSchema),
-    defaultValues: {
-      fullName: '',
-      rut: '',
-      address: '',
-      commune: 'Viña del Mar',
-      lat: null,
-      lng: null,
-      phone: '',
-      email: '',
-      ageRange: null,
-      riskLevel: 'bajo',
-      vulnerability: '',
-      householdSize: 1,
-      hasPets: false,
-      needsMedication: false,
-      needsMobility: false,
-      needsEvacuation: false,
-      notes: '',
-      assignedTo: '',
-    },
-  });
+  const [form, setForm] = useState<NewFichaState>(NEW_FICHA_INITIAL);
+  const [errors, setErrors] = useState<{
+    fullName?: string;
+    commune?: string;
+    ageRange?: string;
+    riskLevel?: string;
+    email?: string;
+  }>({});
 
-  const onSubmit = async (values: NewFichaForm) => {
+  const setField = <K extends keyof NewFichaState>(
+    key: K,
+    value: NewFichaState[K],
+  ) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (key in errors) {
+      setErrors((prev) => ({ ...prev, [key]: undefined }));
+    }
+  };
+
+  const resetForm = () => {
+    setForm(NEW_FICHA_INITIAL);
+    setErrors({});
+  };
+
+  const handleOpenChange = (v: boolean) => {
+    if (!v) resetForm();
+    onOpenChange(v);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const nextErrors: typeof errors = {};
+    if (!form.fullName.trim()) nextErrors.fullName = 'Nombre obligatorio';
+    if (!form.commune.trim()) nextErrors.commune = 'Comuna obligatoria';
+    if (!form.ageRange) nextErrors.ageRange = 'Rango etario obligatorio';
+    if (!form.riskLevel) nextErrors.riskLevel = 'Nivel de riesgo obligatorio';
+    if (
+      form.email.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
+    ) {
+      nextErrors.email = 'Email inválido';
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      return;
+    }
+
     setSubmitting(true);
     try {
+      const latNum = form.lat.trim() === '' ? null : Number(form.lat);
+      const lngNum = form.lng.trim() === '' ? null : Number(form.lng);
       const body = {
-        ...values,
-        email: values.email === '' ? null : values.email,
-        lat: values.lat === null || Number.isNaN(values.lat as number) ? null : values.lat,
-        lng: values.lng === null || Number.isNaN(values.lng as number) ? null : values.lng,
+        fullName: form.fullName.trim(),
+        rut: form.rut.trim() || null,
+        address: form.address.trim() || null,
+        commune: form.commune,
+        lat: latNum === null || !Number.isFinite(latNum) ? null : latNum,
+        lng: lngNum === null || !Number.isFinite(lngNum) ? null : lngNum,
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        ageRange: form.ageRange || null,
+        riskLevel: form.riskLevel,
+        vulnerability: form.vulnerability.trim() || null,
+        householdSize: Number(form.householdSize) || 1,
+        hasPets: form.hasPets,
+        needsMedication: form.needsMedication,
+        needsMobility: form.needsMobility,
+        needsEvacuation: form.needsEvacuation,
+        notes: form.notes.trim() || null,
+        assignedTo: form.assignedTo.trim() || null,
       };
       const res = await fetch('/api/fichas', {
         method: 'POST',
@@ -477,7 +509,7 @@ function NewFichaDialog({
       toast.success('Ficha creada', {
         description: `Código ${created.code}`,
       });
-      form.reset();
+      resetForm();
       onCreated();
     } catch {
       toast.error('Error de red al crear la ficha.');
@@ -487,7 +519,7 @@ function NewFichaDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Nueva Ficha FIBER</DialogTitle>
@@ -497,327 +529,279 @@ function NewFichaDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-          >
-            <FormField
-              control={form.control}
-              name="fullName"
-              render={({ field }) => (
-                <FormItem className="sm:col-span-2">
-                  <FormLabel>Nombre completo *</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ej. María González Pérez" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+        <form
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        >
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label htmlFor="ficha-fullName">Nombre completo *</Label>
+            <Input
+              id="ficha-fullName"
+              placeholder="Ej. María González Pérez"
+              value={form.fullName}
+              onChange={(e) => setField('fullName', e.target.value)}
+              aria-invalid={!!errors.fullName}
             />
-            <FormField
-              control={form.control}
-              name="rut"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>RUT</FormLabel>
-                  <FormControl>
-                    <Input placeholder="12.345.678-9" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="ageRange"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Rango etario</FormLabel>
-                  <Select
-                    onValueChange={(v) => field.onChange(v as AgeRange)}
-                    value={field.value ?? undefined}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Selecciona…" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {AGE_RANGES.map((r) => (
-                        <SelectItem key={r} value={r}>
-                          {r} años
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="address"
-              render={({ field }) => (
-                <FormItem className="sm:col-span-2">
-                  <FormLabel>Dirección</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Calle, número, sector"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="commune"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Comuna</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {COMMUNES.map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="riskLevel"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nivel de riesgo</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {RISK_LEVELS.map((r) => (
-                        <SelectItem key={r} value={r}>
-                          {riskLevelLabel(r)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="lat"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Latitud</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="any"
-                      placeholder="-33.0245"
-                      {...field}
-                      value={field.value ?? ''}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="lng"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Longitud</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="any"
-                      placeholder="-71.5517"
-                      {...field}
-                      value={field.value ?? ''}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Teléfono</FormLabel>
-                  <FormControl>
-                    <Input placeholder="+56 32 …" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="correo@dominio.cl"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="householdSize"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Tamaño hogar</FormLabel>
-                  <FormControl>
-                    <Input type="number" min={1} step={1} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="vulnerability"
-              render={({ field }) => (
-                <FormItem className="sm:col-span-2">
-                  <FormLabel>Vulnerabilidad</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Movilidad reducida, salud crónica, …"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="assignedTo"
-              render={({ field }) => (
-                <FormItem className="sm:col-span-2">
-                  <FormLabel>Asignado a</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Profesional responsable"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {errors.fullName && (
+              <p className="text-xs text-destructive">{errors.fullName}</p>
+            )}
+          </div>
 
-            {/* Boolean needs */}
-            <div className="grid grid-cols-2 gap-2 sm:col-span-2">
-              {(
-                [
-                  ['needsEvacuation', 'Requiere evacuación'],
-                  ['needsMedication', 'Requiere medicación'],
-                  ['needsMobility', 'Movilidad reducida'],
-                  ['hasPets', 'Tiene mascotas'],
-                ] as const
-              ).map(([key, label]) => (
-                <FormField
-                  key={key}
-                  control={form.control}
-                  name={key}
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center gap-2 space-y-0">
-                      <FormControl>
-                        <input
-                          type="checkbox"
-                          checked={field.value as boolean}
-                          onChange={(e) => field.onChange(e.target.checked)}
-                          className="h-4 w-4 rounded border-input"
-                        />
-                      </FormControl>
-                      <FormLabel className="text-xs font-normal">
-                        {label}
-                      </FormLabel>
-                    </FormItem>
-                  )}
-                />
-              ))}
-            </div>
-
-            <FormField
-              control={form.control}
-              name="notes"
-              render={({ field }) => (
-                <FormItem className="sm:col-span-2">
-                  <FormLabel>Notas</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Observaciones, antecedentes relevantes…"
-                      rows={3}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Trazabilidad: AuditLog (Ley 19.628 art. 2).
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ficha-rut">RUT</Label>
+            <Input
+              id="ficha-rut"
+              placeholder="12.345.678-9"
+              value={form.rut}
+              onChange={(e) => setField('rut', e.target.value)}
             />
+          </div>
 
-            <DialogFooter className="sm:col-span-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={submitting}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ficha-ageRange">Rango etario</Label>
+            <Select
+              value={form.ageRange || undefined}
+              onValueChange={(v) => setField('ageRange', v as AgeRange)}
+            >
+              <SelectTrigger id="ficha-ageRange" className="w-full">
+                <SelectValue placeholder="Selecciona…" />
+              </SelectTrigger>
+              <SelectContent>
+                {AGE_RANGES.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r} años
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.ageRange && (
+              <p className="text-xs text-destructive">{errors.ageRange}</p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label htmlFor="ficha-address">Dirección</Label>
+            <Input
+              id="ficha-address"
+              placeholder="Calle, número, sector"
+              value={form.address}
+              onChange={(e) => setField('address', e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ficha-commune">Comuna</Label>
+            <Select
+              value={form.commune}
+              onValueChange={(v) => setField('commune', v)}
+            >
+              <SelectTrigger id="ficha-commune" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {COMMUNES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.commune && (
+              <p className="text-xs text-destructive">{errors.commune}</p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ficha-riskLevel">Nivel de riesgo</Label>
+            <Select
+              value={form.riskLevel}
+              onValueChange={(v) => setField('riskLevel', v as RiskLevel)}
+            >
+              <SelectTrigger id="ficha-riskLevel" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {RISK_LEVELS.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {riskLevelLabel(r)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.riskLevel && (
+              <p className="text-xs text-destructive">{errors.riskLevel}</p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ficha-lat">Latitud</Label>
+            <Input
+              id="ficha-lat"
+              type="number"
+              step="any"
+              placeholder="-33.0245"
+              value={form.lat}
+              onChange={(e) => setField('lat', e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ficha-lng">Longitud</Label>
+            <Input
+              id="ficha-lng"
+              type="number"
+              step="any"
+              placeholder="-71.5517"
+              value={form.lng}
+              onChange={(e) => setField('lng', e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ficha-phone">Teléfono</Label>
+            <Input
+              id="ficha-phone"
+              placeholder="+56 32 …"
+              value={form.phone}
+              onChange={(e) => setField('phone', e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ficha-email">Email</Label>
+            <Input
+              id="ficha-email"
+              type="email"
+              placeholder="correo@dominio.cl"
+              value={form.email}
+              onChange={(e) => setField('email', e.target.value)}
+              aria-invalid={!!errors.email}
+            />
+            {errors.email && (
+              <p className="text-xs text-destructive">{errors.email}</p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ficha-householdSize">Tamaño hogar</Label>
+            <Input
+              id="ficha-householdSize"
+              type="number"
+              min={1}
+              step={1}
+              value={form.householdSize}
+              onChange={(e) => setField('householdSize', e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label htmlFor="ficha-vulnerability">Vulnerabilidad</Label>
+            <Input
+              id="ficha-vulnerability"
+              placeholder="Movilidad reducida, salud crónica, …"
+              value={form.vulnerability}
+              onChange={(e) => setField('vulnerability', e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label htmlFor="ficha-assignedTo">Asignado a</Label>
+            <Input
+              id="ficha-assignedTo"
+              placeholder="Profesional responsable"
+              value={form.assignedTo}
+              onChange={(e) => setField('assignedTo', e.target.value)}
+            />
+          </div>
+
+          {/* Boolean needs */}
+          <div className="grid grid-cols-2 gap-2 sm:col-span-2">
+            {(
+              [
+                ['needsEvacuation', 'Requiere evacuación'],
+                ['needsMedication', 'Requiere medicación'],
+                ['needsMobility', 'Movilidad reducida'],
+                ['hasPets', 'Tiene mascotas'],
+              ] as const
+            ).map(([key, label]) => (
+              <div
+                key={key}
+                className="flex flex-row items-center gap-2"
               >
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={submitting}>
-                {submitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Crear ficha
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+                <input
+                  type="checkbox"
+                  id={`ficha-${key}`}
+                  checked={form[key] as boolean}
+                  onChange={(e) => setField(key, e.target.checked)}
+                  className="h-4 w-4 rounded border-input"
+                />
+                <Label
+                  htmlFor={`ficha-${key}`}
+                  className="text-xs font-normal"
+                >
+                  {label}
+                </Label>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label htmlFor="ficha-notes">Notas</Label>
+            <Textarea
+              id="ficha-notes"
+              placeholder="Observaciones, antecedentes relevantes…"
+              rows={3}
+              value={form.notes}
+              onChange={(e) => setField('notes', e.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Trazabilidad: AuditLog (Ley 19.628 art. 2).
+            </p>
+          </div>
+
+          <DialogFooter className="sm:col-span-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              Crear ficha
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Edit ficha dialog (PATCH)
+// Edit ficha dialog (PATCH, plain useState controlled form)
 // ---------------------------------------------------------------------------
+interface EditFichaState {
+  riskLevel: RiskLevel;
+  status: FichaStatus;
+  assignedTo: string;
+  notes: string;
+}
+
+function buildEditState(ficha: FichaFIBER): EditFichaState {
+  return {
+    riskLevel: ficha.riskLevel,
+    status: ficha.status,
+    assignedTo: ficha.assignedTo ?? '',
+    notes: ficha.notes ?? '',
+  };
+}
+
 function EditFichaDialog({
   ficha,
   onClose,
@@ -828,34 +812,31 @@ function EditFichaDialog({
   onUpdated: () => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
-  const form = useForm<EditFichaForm>({
-    resolver: zodResolver(editFichaSchema),
-    defaultValues: {
-      riskLevel: ficha.riskLevel,
-      status: ficha.status,
-      assignedTo: ficha.assignedTo ?? '',
-      notes: ficha.notes ?? '',
-    },
-  });
+  const [form, setForm] = useState<EditFichaState>(() =>
+    buildEditState(ficha),
+  );
 
-  // Reset form when ficha changes
+  // Reset local state when the ficha prop changes.
   useEffect(() => {
-    form.reset({
-      riskLevel: ficha.riskLevel,
-      status: ficha.status,
-      assignedTo: ficha.assignedTo ?? '',
-      notes: ficha.notes ?? '',
-    });
-  }, [ficha, form]);
+    setForm(buildEditState(ficha));
+  }, [ficha]);
 
-  const onSubmit = async (values: EditFichaForm) => {
+  const setField = <K extends keyof EditFichaState>(
+    key: K,
+    value: EditFichaState[K],
+  ) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setSubmitting(true);
     try {
       const body = {
-        riskLevel: values.riskLevel,
-        status: values.status,
-        assignedTo: values.assignedTo || null,
-        notes: values.notes || null,
+        riskLevel: form.riskLevel,
+        status: form.status,
+        assignedTo: form.assignedTo.trim() || null,
+        notes: form.notes.trim() || null,
       };
       const res = await fetch(`/api/fichas/${ficha.id}`, {
         method: 'PATCH',
@@ -872,8 +853,8 @@ function EditFichaDialog({
         return;
       }
       toast.success('Ficha actualizada', {
-        description: `${ficha.code} · ${riskLevelLabel(values.riskLevel)} · ${fichaStatusLabel(
-          values.status,
+        description: `${ficha.code} · ${riskLevelLabel(form.riskLevel)} · ${fichaStatusLabel(
+          form.status,
         )}`,
       });
       onUpdated();
@@ -924,106 +905,85 @@ function EditFichaDialog({
           )}
         </div>
 
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-          >
-            <FormField
-              control={form.control}
-              name="riskLevel"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nivel de riesgo</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {RISK_LEVELS.map((r) => (
-                        <SelectItem key={r} value={r}>
-                          {riskLevelLabel(r)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
+        <form
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        >
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="edit-riskLevel">Nivel de riesgo</Label>
+            <Select
+              value={form.riskLevel}
+              onValueChange={(v) => setField('riskLevel', v as RiskLevel)}
+            >
+              <SelectTrigger id="edit-riskLevel" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {RISK_LEVELS.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {riskLevelLabel(r)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="edit-status">Estado</Label>
+            <Select
+              value={form.status}
+              onValueChange={(v) => setField('status', v as FichaStatus)}
+            >
+              <SelectTrigger id="edit-status" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {fichaStatusLabel(s)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label htmlFor="edit-assignedTo">Asignado a</Label>
+            <Input
+              id="edit-assignedTo"
+              placeholder="Profesional responsable"
+              value={form.assignedTo}
+              onChange={(e) => setField('assignedTo', e.target.value)}
             />
-            <FormField
-              control={form.control}
-              name="status"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Estado</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {STATUSES.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {fichaStatusLabel(s)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <Label htmlFor="edit-notes">Notas</Label>
+            <Textarea
+              id="edit-notes"
+              rows={3}
+              value={form.notes}
+              onChange={(e) => setField('notes', e.target.value)}
             />
-            <FormField
-              control={form.control}
-              name="assignedTo"
-              render={({ field }) => (
-                <FormItem className="sm:col-span-2">
-                  <FormLabel>Asignado a</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Profesional responsable"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+            <p className="text-[11px] text-muted-foreground">
+              Cambio registrado en AuditLog.
+            </p>
+          </div>
+
+          <DialogFooter className="sm:col-span-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
               )}
-            />
-            <FormField
-              control={form.control}
-              name="notes"
-              render={({ field }) => (
-                <FormItem className="sm:col-span-2">
-                  <FormLabel>Notas</FormLabel>
-                  <FormControl>
-                    <Textarea rows={3} {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    Cambio registrado en AuditLog.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <DialogFooter className="sm:col-span-2">
-              <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={submitting}>
-                {submitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Guardar cambios
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+              Guardar cambios
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
