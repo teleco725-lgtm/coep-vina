@@ -9,20 +9,18 @@
 //   - `alert`: nueva alerta broadcast
 //   - `stats`: cada 15s con agregados
 //
-// Cuando llega una alerta `critical`:
-//   1. Solicita permiso de Notification (si no se ha pedido antes).
-//   2. PostMessage al Service Worker para que dispare la notificación nativa
-//      (funciona aunque la pestaña pase a background).
-//   3. Muestra un toast sonner de feedback in-app.
+// Notificaciones:
+//   - Las alertas críticas disparan una notificación nativa vía Service Worker
+//     (para que el operador la vea aunque la pestaña esté en background).
+//   - El toast sonner en pantalla se ELIMINÓ para no ocupar espacio; en su
+//     lugar, las alertas se acumulan en el badge de la campana del header,
+//     donde el operador puede revisarlas cuando quiera.
 // ============================================================================
 'use client';
 
 import { useEffect, useRef } from 'react';
-import type { JSX } from 'react';
 import { create } from 'zustand';
 import { io, type Socket } from 'socket.io-client';
-import { toast } from 'sonner';
-import { Siren } from 'lucide-react';
 
 import type { BroadcastAlert, Stats } from '@/lib/types';
 import {
@@ -39,10 +37,12 @@ interface AlertsStore {
   alerts: BroadcastAlert[];
   stats: Stats | null;
   status: ConnectionStatus;
+  unreadCount: number;
   setAlerts: (a: BroadcastAlert[]) => void;
   prependAlert: (a: BroadcastAlert) => void;
   setStats: (s: Stats) => void;
   setStatus: (s: ConnectionStatus) => void;
+  markAllRead: () => void;
   reset: () => void;
 }
 
@@ -52,14 +52,19 @@ const useAlertsStore = create<AlertsStore>((set) => ({
   alerts: [],
   stats: null,
   status: 'connecting',
+  unreadCount: 0,
   setAlerts: (a) => set({ alerts: a.slice(0, MAX_ALERTS) }),
   prependAlert: (a) =>
     set((state) => ({
       alerts: [a, ...state.alerts].slice(0, MAX_ALERTS),
+      // Cada alerta nueva incrementa el contador de no leídas. Esto es
+      // feedback visual en la campana del header.
+      unreadCount: state.unreadCount + 1,
     })),
   setStats: (s) => set({ stats: s }),
   setStatus: (s) => set({ status: s }),
-  reset: () => set({ alerts: [], stats: null, status: 'connecting' }),
+  markAllRead: () => set({ unreadCount: 0 }),
+  reset: () => set({ alerts: [], stats: null, status: 'connecting', unreadCount: 0 }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -155,30 +160,17 @@ export function useAlertsSocket(): {
       }
     };
 
-    // Build the critical toast icon as JSX once per critical alert.
-    const criticalIcon: JSX.Element = <Siren className="h-4 w-4" />;
-
     const onAlert = (alert: BroadcastAlert) => {
       if (!alert || !alert.id) return;
       prependAlert(alert);
 
-      // Notificación nativa + sonner para alertas críticas.
+      // Notificación nativa del sistema operativo vía Service Worker, SOLO
+      // para alertas críticas. Esto funciona aunque la pestaña esté en
+      // background. NO mostramos toast en pantalla: el contador de la
+      // campana del header ya da feedback visible al operador.
       if (alert.severity === 'critical') {
         void ensureNotificationPermission();
         void notifyServiceWorker(alert);
-
-        toast.error(alert.title, {
-          description: `${sourceShortLabel(alert.sourceCode)} · ${
-            alert.commune ?? 'Región de Valparaíso'
-          }`,
-          icon: criticalIcon,
-          duration: 8000,
-        });
-      } else if (alert.severity === 'warning') {
-        toast.warning(alert.title, {
-          description: sourceShortLabel(alert.sourceCode),
-          duration: 5000,
-        });
       }
     };
     const onStats = (s: Stats) => {
@@ -210,4 +202,23 @@ export function useAlertsSocket(): {
   }, []);
 
   return { alerts, stats, status };
+}
+
+// ---------------------------------------------------------------------------
+// Hooks derivados para la campana de notificaciones del header.
+// ---------------------------------------------------------------------------
+
+/** Lista de las últimas 30 alertas para mostrar en el popover de la campana. */
+export function useRecentNotifications(limit = 30): BroadcastAlert[] {
+  return useAlertsStore((s) => s.alerts.slice(0, limit));
+}
+
+/** Contador de alertas no leídas (se resetea al abrir la campana). */
+export function useUnreadCount(): number {
+  return useAlertsStore((s) => s.unreadCount);
+}
+
+/** Función para marcar todas las notificaciones como leídas. */
+export function useMarkAllRead(): () => void {
+  return useAlertsStore((s) => s.markAllRead);
 }

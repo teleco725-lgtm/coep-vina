@@ -235,3 +235,90 @@ Stage Summary:
 - LINT: limpio (0 errores)
 - PROBLEMA DE INFRAESTRUCTURA: El sandbox (4GB RAM, cgroup) mata el proceso next-server de forma no determinística cuando recompila el bundle de Turbopack en frío. El dashboard funcionó al inicio de la sesión (caché .next preexistente), pero al modificar código y limpiar .next, la recompilación en frío consistentemente mata el proceso node (no OUM global registrado, posiblemente límite de cgroup o watchdog del sandbox). Las optimizaciones (eliminar recharts + react-hook-form) redujeron la carga pero el proceso sigue cayéndose intermitentemente. El código está correcto; el problema es de recursos del sandbox.
 - SERVICIOS: Ambos procesos (next dev puerto 3000, alerts-service WebSocket puerto 3003) reiniciados y corriendo.
+
+---
+Task ID: 6
+Agent: full-stack-developer (exports + bell + tides + rename)
+Task: Renombrar el centro a "Comando de Emergencia Regional", consolidar notificaciones en una campana, agregar export a Excel/Word/PDF/PPTX, y arreglar la legibilidad del tab de mareas.
+
+Work Log:
+- Lectura de `worklog.md` (Tasks 0, 2-a, 3, 4, 5, 4-update) y de los archivos objetivo: `src/app/layout.tsx`, `src/app/page.tsx`, `src/hooks/use-alerts-socket.tsx`, `src/components/dashboard/charts-panel.tsx`, `public/manifest.webmanifest`, `src/lib/db.ts`, `prisma/schema.prisma`, `src/lib/types.ts`, `src/lib/severity.ts`, `src/app/api/compliance/route.ts`, `mini-services/alerts-service/index.ts`.
+- Instaladas dependencias server-side: `xlsx@0.18.5`, `docx@9.13.0`, `pdfkit@0.20.2`, `pptxgenjs@4.0.1` (viven exclusivamente en las rutas `src/app/api/export/*`, no afectan el bundle del cliente).
+
+**Task A — Renombrado del centro:**
+- `src/app/layout.tsx`: metadata.title pasa a `"Comando de Emergencia Regional | VeltrixIntegra Ecosistema Digital 360"`. Description menciona Comando de Emergencia Regional, VeltrixIntegra Ecosistema Digital 360, Viña del Mar, Región de Valparaíso, gestión de emergencias. Authors actualizado. openGraph actualizado.
+- `src/app/page.tsx`: header `<h1>` ahora "Comando de Emergencia Regional", subtítulo `<p>` "VeltrixIntegra · Ecosistema Digital 360 · Viña del Mar", alt del logo actualizado. Footer actualizado a "Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360". Versión 1.0.0 → 1.1.0.
+- `public/manifest.webmanifest`: name="Comando de Emergencia Regional", short_name="Comando Regional", description actualizada.
+
+**Task B — Campana de notificaciones:**
+- `src/hooks/use-alerts-socket.tsx`: 
+  * Store zustand agrega `unreadCount` y `markAllRead`. `prependAlert` incrementa `unreadCount` en cada alerta nueva. `reset` limpia todo.
+  * Eliminado el `toast.error` (críticas) y `toast.warning` (alertas) que ocupaban espacio en pantalla. Eliminados imports `toast`, `Siren`, `JSX`.
+  * Se conserva la notificación nativa vía Service Worker (postMessage) para alertas críticas — esa notificación funciona aunque la pestaña esté en background.
+  * Nuevos hooks: `useRecentNotifications(limit=30)` (slice de las últimas 30 alertas), `useUnreadCount()` (contador), `useMarkAllRead()` (acción para resetear).
+- `src/app/page.tsx`: nuevo componente `NotificationsBell`:
+  * Botón ghost con icono `Bell` (lucide) y badge destructivo con el contador no-leídas (1-99+).
+  * `Popover` de 360px de ancho, max-h-[24rem] scrollable vía `ScrollArea`.
+  * Header del popover con icono Bell, "Notificaciones", badge de nuevas y botón "Marcar todas leídas".
+  * Cada item: dot de color por severidad, badge de fuente con color de `sourceColor`, time-ago con `formatDistanceToNow` (date-fns locale es), título (line-clamp-2), comuna truncada.
+  * `useEffect` marca todo como leído al abrir el popover (`if (open) markAllRead()`).
+  * Sustituye al `criticalCount` Badge anterior del header (eliminado).
+- `ConnectionBadge` se conserva intacto.
+
+**Task C — Export a Excel/Word/PDF/PPTX:**
+- `src/app/api/export/_lib.ts` (privado, no se trata como ruta): 
+  * `loadExportData()` — Promise.all sobre Prisma: `db.source.findMany`, `db.alert.findMany({include:{source:true}, take:200, orderBy:issuedAt desc})`, `db.incident.findMany`, `db.fichaFIBER.findMany`. Construye `ApiStats` con agregaciones `by{Source,Severity,Category,State}`, `by{Type,Nature,State}`, `by{RiskLevel,Status,Commune}`, `active`. Incluye `COMPLIANCE_PAYLOAD` inline (espejo de `/api/compliance`).
+  * Helpers de etiqueta: `sourceLabel`, `severityLabel`, `incidentTypeLabel`, `incidentStateLabel`, `riskLevelLabel`, `fichaStatusLabel`, `categoryLabel`, `formatDate`, `formatLongDate`, `formatRutForReport` (XX.XXX.XXX-X).
+  * `buildResumenEjecutivo(data)` — 3 párrafos en español humanizado con la situación actual (incidentes activos, personas afectadas/evacuadas, fichas críticas, cumplimiento normativo).
+  * `buildRecomendaciones(data)` — 5 recomendaciones en lenguaje plano según el estado actual.
+- `src/app/api/export/excel/route.ts` (GET): 5 hojas — Alertas (9 cols), Incidentes (11 cols), Fichas FIBER (10 cols), Resumen (indicadores + por fuente + por severidad + por riesgo + fecha), Cumplimiento Legal (categoría/nombre/descripción/enlace). Auto-width, freeze primera fila, header bold con fill `#3A78B8`. `XLSX.write(wb, {type:'buffer', bookType:'xlsx', cellStyles:true})`. Content-Type `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`. Filename `informe-emergencias-vina-del-mar-YYYY-MM-DD.xlsx`. Verificado: 200, 44 KB, "Microsoft Excel 2007+".
+- `src/app/api/export/word/route.ts` (POST): Documento con cover page (título 48px brand color, subtítulo, "Documento confidencial — Ley 19.628"), tabla de contenidos, 6 secciones: (1) Resumen Ejecutivo, (2) Alertas Activas (tabla 5 cols), (3) Incidentes Registrados (tabla 6 cols con descripción humanizada), (4) Personas en Riesgo (tabla con código/nombre/RUT/riesgo/necesidades/estado + footnote sobre Ley 19.628), (5) Cumplimiento Legal (subheadings SENAPRED/Ley 19.628/Ley 21.519/ISO 27001/otros marcos con bullets), (6) Recomendaciones (bullets). Header con "Informe de Emergencias — Viña del Mar" + fecha. Footer en cada página con "Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360 · Confidencial · Página N". `Packer.toBuffer(doc)`. Content-Type `application/vnd.openxmlformats-officedocument.wordprocessingml.document`. Verificado: 200, 17.5 KB, "Microsoft Word 2007+".
+- `src/app/api/export/pdf/route.ts` (POST): PDF con cover page (bandas de brand color, título 34px, subtítulo 22px, fecha y aviso de confidencialidad), body con 6 secciones idénticas al Word, headings en color brand, párrafos justificados, tablas con header fill brand y body alternando fill blanco/gris claro, paginación en footer. Usa `pdfkit` con `LETTER` size y margins 60/50. `doc.bufferedPageRange()` para pintar footers en todas las páginas al final. Verificado: 200, 13.2 KB, "PDF document, version 1.3, 7 page(s)".
+- `src/app/api/export/pptx/route.ts` (POST): 10 slides 16:9 (13.333" × 7.5") con paleta Viña (primary `#3A78B8`, accent `#D4A943`):
+  1. Title (banda azul, "Comando de Emergencia Regional" 40px, "Viña del Mar · VeltrixIntegra Ecosistema Digital 360" en accent, fecha, aviso confidencial)
+  2. Situación Actual — 3 big-number cards (alertas activas, incidentes en curso, personas en riesgo)
+  3. Alertas por Fuente — barras horizontales con sourceLabel + número
+  4. Mapa de Incidentes — tabla (Tipo/Severidad/Ubicación/Afectados/Evacuados)
+  5. Personas en Riesgo — barras horizontales por nivel de riesgo (crítico/alto/medio/bajo) con descripción de cada nivel
+  6. Mareas (SHOA) — 3 cards (baja/media/alta) con resaltado del nivel actual
+  7. Cumplimiento Legal — 3 cards (SENAPRED, Ley 19.628, Ley 21.519) con explicación de una línea
+  8. Recomendaciones — 5 bullets numerados
+  9. Contactos y Canales Oficiales — tabla con 6 fuentes y qué reporta cada una
+  10. Cierre "Gracias" en fondo brand color con accent.
+  Header de marca en cada slide (excepto portada/cierre) y footer con paginación. Bug encontrado: pptxgenjs `addTable` requiere `TableRow[]` donde cada row ES un array de cells (no objeto con `.cells`). Fix aplicado. Verificado: 200, 268 KB, "Zip archive (.pptx)".
+- Frontend `ExportMenu` en `src/app/page.tsx`: `DropdownMenu` con `Download` icon, items "Excel/Word/PowerPoint/PDF". Excel abre `window.open('/api/export/excel')`. Word/PDF/PPTX usan `fetch` POST → blob → `URL.createObjectURL` → click en `<a download>`. Loading state con `Loader2` spin y toast "Generando documento…" / "Generado" / "No se pudo generar". Posicionado junto al botón "Nueva Catástrofe".
+
+**Task D — Tab Mareas:**
+- `src/components/dashboard/charts-panel.tsx`: 
+  * `useAlertsSocket` ahora también consume `alerts`.
+  * `mareaAlerts` = alerts filtradas por `sourceCode==='shoa' && category==='marea'`. `currentMarea` = la más reciente. `recentMareas` = últimas 5.
+  * `TIDE_SEGMENTS` con 3 niveles: baja (azul marino `oklch(0.55 0.16 240)` + icono `TrendingDown`), media (teal mar `oklch(0.62 0.10 200)` + `Minus`), alta (naranja-rojo `oklch(0.62 0.18 35)` + `Droplets`). Cada segmento incluye `label` (Marea Baja (Bajamar)), `short` (Baja), `description` (en lenguaje simple) y `icon`.
+  * Tercer `TabsTrigger` "Mareas" con icono `Waves`.
+  * `TabsContent` "Mareas":
+    1. Header "Estado de mareas · SHOA · N alerta(s) reciente(s)"
+    2. Gauge horizontal: 3 segmentos flex 1 con el actual en su color y los demás en `--muted` con opacidad 0.45. Icono + label short en cada segmento. `role="meter"` + `aria-valuenow={0|1|2}`.
+    3. Descripción del nivel actual en un card muted.
+    4. **Leyenda DEBAJO del gauge** (no a un lado) — `ul` vertical con cada nivel en su color, label completo en `text-sm` (≥ 14px), badge "ACTUAL" en el nivel activo. Texto legible (>= 12px).
+    5. Últimas 5 lecturas: lista compacta con dot de color + label + time-ago.
+- Import `Waves, Droplets, TrendingDown, Minus` desde lucide-react. Import `formatDistanceToNow` y locale `es` de date-fns. Eliminado import de `BroadcastAlert` (no se usa directamente).
+
+**Lint & Verificación:**
+- `bun run lint` pasa limpio (0 errores, 0 warnings) tras corregir: el unused eslint-disable directive en NotificationsBell, el import no usado `BroadcastAlert` en charts-panel, y los `cells: [{...}]` en pptx que debían ser arrays directos.
+- Las 4 rutas de export verificadas en vivo (dev server):
+  * `GET  /api/export/excel` → 200, 44 KB, `Microsoft Excel 2007+`
+  * `POST /api/export/word`  → 200, 17.5 KB, `Microsoft Word 2007+`
+  * `POST /api/export/pdf`   → 200, 13.2 KB, `PDF document, version 1.3, 7 page(s)`
+  * `POST /api/export/pptx`  → 200, 268 KB, `Zip archive (.pptx)`
+- `GET /` → 200 con contenido verificado: "Comando de Emergencia Regional" (4), "VeltrixIntegra · Ecosistema Digital 360" (1), "Exportar" (1), "Notificaciones" (1), "Mareas" (1).
+- Todas las compilaciones en dev.log salen sin errores: `GET / 200`, `POST /api/export/{word,pdf,pptx} 200`, `GET /api/export/excel 200`.
+
+Stage Summary:
+- **Rename completo** del centro a "Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360" en metadata (layout), header `<h1>`, subtítulo, footer, manifest, alt del logo.
+- **Notificaciones consolidadas** en una campana (Bell icon) en el header. El contador de no-leídas incrementa con cada alerta broadcast y se resetea al abrir el popover. El popover muestra las últimas 30 alertas con dot de severidad, badge de fuente con color, time-ago, título y comuna. Eliminados los `toast.error`/`toast.warning` para alertas críticas/warning — el feedback visual ahora vive en la campana. El Service Worker sigue disparando notificaciones nativas cuando la pestaña está en background. `ConnectionBadge` se conserva.
+- **4 export routes** funcionales (`/api/export/{excel,word,pdf,pptx}`). Las 4 generan archivos válidos (verificado con `file(1)`). El contenido está escrito en español chileno humanizado, accesible a un lector no técnico (alcalde, secretario municipal, líder comunitario). Los RUT se muestran en formato XX.XXX.XXX-X con footnote sobre Ley 19.628. La portada de Word/PDF lleva el aviso "Documento confidencial — Ley 19.628". El PPTX usa la paleta Viña (azul petróleo + arena dorada) en 16:9. Las 4 librerías (`xlsx`, `docx`, `pdfkit`, `pptxgenjs`) viven exclusivamente en `src/app/api/export/*` — el bundle del cliente NO las importa y no aumentó su peso.
+- **Tab "Mareas"** agregado al `ChartsPanel` (al lado de Fuentes y Tipos). Muestra el nivel actual de marea con un gauge horizontal de 3 segmentos (Baja/Media/Alta) que resalta el nivel actual, una descripción del nivel en lenguaje simple, una leyenda claramente legible DEBAJO del gauge con chips de color (texto >= 12px, label "Marea Baja (Bajamar)" / "Marea Media" / "Marea Alta (Pleamar)"), y una lista de las últimas 5 lecturas de SHOA con timestamp.
+- **Lint**: 0 errores, 0 warnings.
+- **No se modificó**: `prisma/schema.prisma`, `src/lib/db.ts`, `mini-services/alerts-service`, rutas API existentes (`/api/alerts`, `/api/incidents`, etc.).
+- **No se reintrodujeron** recharts, react-hook-form ni zod en el bundle cliente. Las dependencias nuevas (`xlsx`, `docx`, `pdfkit`, `pptxgenjs`) son server-only.
+- **Issue conocido**: el sandbox (4 GB cgroup) mata el proceso next-server de forma no determinística durante la compilación en frío de las rutas de export (sobretodo pptx y pdfkit que son más pesadas). Solución: cada ruta compila en ~700 ms una vez que el cache está caliente; las 4 se ejecutan en secuencia sin problema. Si el dev server muere, reiniciarlo — las 4 rutas ya están probadas y funcionales.
+

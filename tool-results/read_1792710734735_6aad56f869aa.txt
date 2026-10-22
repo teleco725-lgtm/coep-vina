@@ -1,0 +1,857 @@
+     1→/**
+     2→ * ============================================================================
+     3→ * Mini-service: WebSocket real-time emergency alerts for Viña del Mar, Chile
+     4→ * ============================================================================
+     5→ *
+     6→ * Broadcasts simulated emergency alerts from:
+     7→ *   - SENAPRED   (Servicio Nacional de Prevención y Respuesta ante Desastres)
+     8→ *   - CONAF/COGRIG (Corporación Nacional Forestal)
+     9→ *   - SHOA       (Servicio Hidrográfico y Oceanográfico de la Armada)
+    10→ *   - Guardia Marina
+    11→ *   - CBV2       (Cuerpo de Bomberos de Viña del Mar 2da Compañía)
+    12→ *   - Carabineros de Chile
+    13→ *   - Radio      (comunicaciones de emergencia / radioperiodismo)
+    14→ *
+    15→ * Server: socket.io on port 3003, path: '/' (REQUIRED for Caddy forwarding).
+    16→ * Run with `bun --hot index.ts` for hot reload during development.
+    17→ * ============================================================================
+    18→ */
+    19→
+    20→import { createServer } from 'http'
+    21→import { Server } from 'socket.io'
+    22→import { v4 as uuidv4 } from 'uuid'
+    23→
+    24→// ============================================================================
+    25→// Public types
+    26→// ============================================================================
+    27→export interface BroadcastAlert {
+    28→  id: string                  // unique id (uuid)
+    29→  externalId?: string | null  // official id if any
+    30→  sourceCode: string          // 'senapred' | 'conaf' | 'shoa' | 'guardiamarina' | 'cbv2' | 'carabineros' | 'radio'
+    31→  sourceName: string          // human name in Spanish
+    32→  category: string            // 'sismo' | 'incendio' | 'marea' | 'meteorologica' | 'tsunami' | 'quimico' | 'inundacion' | 'seguridad' | 'transito' | 'radio'
+    33→  subcategory?: string | null // e.g. marea: 'alta' | 'media' | 'baja'
+    34→  severity: 'info' | 'watch' | 'warning' | 'critical'
+    35→  state: 'activa' | 'en_proceso' | 'cerrada'
+    36→  title: string
+    37→  description: string
+    38→  location?: string | null
+    39→  lat: number                 // Viña del Mar area: ~ -33.02 to -33.06, lng ~ -71.50 to -71.62
+    40→  lng: number
+    41→  region: 'Valparaíso'
+    42→  commune?: string | null     // 'Viña del Mar' | 'Valparaíso' | 'Concón' | 'Quilpué' | 'Villa Alemana'
+    43→  meta?: Record<string, unknown> | null
+    44→  issuedAt: string            // ISO 8601
+    45→}
+    46→
+    47→export interface Stats {
+    48→  total: number
+    49→  bySource: Record<string, number>
+    50→  bySeverity: Record<string, number>
+    51→  byCategory: Record<string, number>
+    52→  byState: Record<string, number>
+    53→  connectedClients: number
+    54→  generatedAt: string
+    55→}
+    56→
+    57→type Severity = BroadcastAlert['severity']
+    58→type State = BroadcastAlert['state']
+    59→type SourceCode = 'senapred' | 'conaf' | 'shoa' | 'guardiamarina' | 'cbv2' | 'carabineros' | 'radio'
+    60→
+    61→// ============================================================================
+    62→// Constants - Viña del Mar geography & sources
+    63→// ============================================================================
+    64→const PORT = 3003
+    65→
+    66→// Viña del Mar (comuna) center ~ -33.0245, -71.5517
+    67→// Se restringe a la comuna de Viña del Mar ÚNICAMENTE (sin Valparaíso/Concón/etc.)
+    68→const VINA_CENTER = { lat: -33.0245, lng: -71.5517 }
+    69→const VINA_LAT_RANGE = { min: -33.055, max: -33.005 }
+    70→const VINA_LNG_RANGE = { min: -71.575, max: -71.525 }
+    71→
+    72→const COMMUNES = ['Viña del Mar'] as const
+    73→
+    74→const SOURCE_NAMES: Record<SourceCode, string> = {
+    75→  senapred: 'SENAPRED - Servicio Nacional de Prevención y Respuesta ante Desastres',
+    76→  conaf: 'CONAF / COGRIG - Corporación Nacional Forestal',
+    77→  shoa: 'SHOA - Servicio Hidrográfico y Oceanográfico de la Armada',
+    78→  guardiamarina: 'Guardia Marina de Chile',
+    79→  cbv2: 'Cuerpo de Bomberos de Viña del Mar 2da Compañía',
+    80→  carabineros: 'Carabineros de Chile',
+    81→  radio: 'Red de Radio de Emergencias',
+    82→}
+    83→
+    84→// ============================================================================
+    85→// Helpers
+    86→// ============================================================================
+    87→function rand(min: number, max: number): number {
+    88→  return Math.random() * (max - min) + min
+    89→}
+    90→function randInt(min: number, max: number): number {
+    91→  return Math.floor(rand(min, max + 1))
+    92→}
+    93→function pick<T>(arr: readonly T[]): T {
+    94→  return arr[Math.floor(Math.random() * arr.length)]
+    95→}
+    96→/**
+    97→ * Pick a variant from the array filtered by critical-ness.
+    98→ * `criticalOnly=true` returns only critical variants; `false` returns only
+    99→ * non-critical ones. This is what keeps critical alerts globally sparse (~5%):
+   100→ * the regular stream NEVER produces a critical variant; only the dedicated
+   101→ * 5% path does.
+   102→ */
+   103→function pickVariant<T extends { severity: Severity }>(variants: T[], criticalOnly: boolean): T {
+   104→  const filtered = variants.filter((v) => (v.severity === 'critical') === criticalOnly)
+   105→  if (filtered.length === 0) {
+   106→    // Fallback for sources without criticals (shouldn't normally happen).
+   107→    return pick(variants)
+   108→  }
+   109→  return pick(filtered)
+   110→}
+   111→function round(v: number, d = 4): number {
+   112→  const p = Math.pow(10, d)
+   113→  return Math.round(v * p) / p
+   114→}
+   115→function randCoord(): { lat: number; lng: number } {
+   116→  return {
+   117→    lat: round(rand(VINA_LAT_RANGE.min, VINA_LAT_RANGE.max), 4),
+   118→    lng: round(rand(VINA_LNG_RANGE.min, VINA_LNG_RANGE.max), 4),
+   119→  }
+   120→}
+   121→function communeForCoord(): string {
+   122→  // Solo comuna de Viña del Mar (sin Valparaíso/Concón/Quilpué/Villa Alemana)
+   123→  return 'Viña del Mar'
+   124→}
+   125→function makeExternalId(prefix: string): string {
+   126→  const year = new Date().getFullYear()
+   127→  return `${prefix}-${year}-${randInt(1000, 9999)}`
+   128→}
+   129→
+   130→// ============================================================================
+   131→// History buffer (in-memory)
+   132→// ============================================================================
+   133→const HISTORY_MAX = 200
+   134→const history: BroadcastAlert[] = []
+   135→
+   136→function pushAlert(alert: BroadcastAlert): void {
+   137→  history.unshift(alert)
+   138→  if (history.length > HISTORY_MAX) history.pop()
+   139→}
+   140→function getRecentAlerts(n: number): BroadcastAlert[] {
+   141→  return history.slice(0, n)
+   142→}
+   143→
+   144→// ============================================================================
+   145→// Source-specific alert generators
+   146→// ============================================================================
+   147→function genSenapred(criticalOnly: boolean = false): BroadcastAlert {
+   148→  const coord = randCoord()
+   149→  const commune = communeForCoord()
+   150→  type Variant = {
+   151→    category: string
+   152→    subcategory?: string | null
+   153→    title: string
+   154→    description: string
+   155→    severity: Severity
+   156→    state?: State
+   157→    meta?: Record<string, unknown> | null
+   158→  }
+   159→  const variants: Variant[] = [
+   160→    {
+   161→      category: 'sismo',
+   162→      title: 'Alerta Temprana Preventiva por Sismo',
+   163→      description:
+   164→        'SENAPRED emite Alerta Temprana Preventiva ante evento sísmico de magnitud moderada percibido en la Región de Valparaíso. Se recomienda mantener calma y seguir canales oficiales.',
+   165→      severity: 'watch',
+   166→      state: 'activa',
+   167→      meta: { magnitud: rand(4.0, 5.5).toFixed(1), profundidad_km: randInt(20, 80) },
+   168→    },
+   169→    {
+   170→      category: 'tsunami',
+   171→      title: 'Alerta Amarilla - Posible Tsunami',
+   172→      description:
+   173→        'SENAPRED emite Alerta Amarilla por posible tsunami producto de sismo de magnitud relevante en zona de subducción. SHOA evalúa niveles de marea. Población costera debe alejarse del litoral.',
+   174→      severity: 'warning',
+   175→      state: 'activa',
+   176→      meta: { evaluacion_shoa: 'en_curso' },
+   177→    },
+   178→    {
+   179→      category: 'inundacion',
+   180→      title: 'Alerta Roja - Inundación súbita',
+   181→      description:
+   182→        'SENAPRED emite Alerta Roja por inundación súbita en quebradas de Viña del Mar ante sistema frontal activo. Se activa evacuación preventiva en sectores vulnerables.',
+   183→      severity: 'critical',
+   184→      state: 'activa',
+   185→      meta: { quebradas_afectadas: ['Aguas Negras', 'San Félix', 'Reñaca'] },
+   186→    },
+   187→    {
+   188→      category: 'meteorologica',
+   189→      title: 'Alerta Amarilla - Sistema frontal activo',
+   190→      description:
+   191→        'SENAPRED emite Alerta Amarilla por sistema frontal con precipitaciones intensas y vientos fuertes en la Región de Valparaíso. Vigencia: 12 horas.',
+   192→      severity: 'warning',
+   193→      state: 'activa',
+   194→      meta: { precipitacion_esperada_mm: randInt(30, 80), vientos_kmh: randInt(40, 80) },
+   195→    },
+   196→    {
+   197→      category: 'inundacion',
+   198→      subcategory: 'aluvion',
+   199→      title: 'Alerta Temprana Preventiva - Riesgo de aluvión',
+   200→      description:
+   201→        'SENAPRED emite Alerta Temprana Preventiva ante riesgo de aluvión en quebradas de la cordillera de la costa, Región de Valparaíso.',
+   202→      severity: 'watch',
+   203→      state: 'activa',
+   204→      meta: null,
+   205→    },
+   206→    {
+   207→      category: 'quimico',
+   208→      title: 'Alerta Roja - Emergencia química',
+   209→      description:
+   210→        'SENAPRED emite Alerta Roja por emergencia química en zona industrial. Se activa protocolo de evacuación y confinamiento perimetral.',
+   211→      severity: 'critical',
+   212→      state: 'activa',
+   213→      meta: { sustancia: 'amoniaco', area_perimetro_m: randInt(200, 800) },
+   214→    },
+   215→    {
+   216→      category: 'sismo',
+   217→      title: 'Cierre de Alerta Temprana Preventiva',
+   218→      description:
+   219→        'SENAPRED cierra Alerta Temprana Preventiva por sismo al confirmarse descartada afectación mayor. Operaciones retoman normalidad.',
+   220→      severity: 'info',
+   221→      state: 'cerrada',
+   222→      meta: null,
+   223→    },
+   224→  ]
+   225→  const v = pickVariant(variants, criticalOnly)
+   226→  return {
+   227→    id: uuidv4(),
+   228→    externalId: makeExternalId('SENAPRED'),
+   229→    sourceCode: 'senapred',
+   230→    sourceName: SOURCE_NAMES.senapred,
+   231→    category: v.category,
+   232→    subcategory: v.subcategory ?? null,
+   233→    severity: v.severity,
+   234→    state: v.state ?? 'activa',
+   235→    title: v.title,
+   236→    description: v.description,
+   237→    location: `Comuna de ${commune}, Región de Valparaíso`,
+   238→    lat: coord.lat,
+   239→    lng: coord.lng,
+   240→    region: 'Valparaíso',
+   241→    commune,
+   242→    meta: v.meta ?? null,
+   243→    issuedAt: new Date().toISOString(),
+   244→  }
+   245→}
+   246→
+   247→function genConaf(criticalOnly: boolean = false): BroadcastAlert {
+   248→  const coord = randCoord()
+   249→  const commune = communeForCoord()
+   250→  type Variant = {
+   251→    title: string
+   252→    description: string
+   253→    severity: Severity
+   254→    state: State
+   255→    meta?: Record<string, unknown> | null
+   256→  }
+   257→  const variants: Variant[] = [
+   258→    {
+   259→      title: 'Alerta de Incendio Forestal - COGRIG detecta focos de calor',
+   260→      description:
+   261→        'COGRIG detecta focos de calor en zona boscosa. CONAF coordina brigadas de combate y evaluación aérea del sector.',
+   262→      severity: 'watch',
+   263→      state: 'en_proceso',
+   264→      meta: { cogrig_deteccion: true, indice_alerta: 0 },
+   265→    },
+   266→    {
+   267→      title: 'Alerta Amarilla - Incendio Forestal en progreso',
+   268→      description:
+   269→        'CONAF confirma incendio forestal activo. Brigadas desplegadas, se evalúa comportamiento del fuego y condiciones meteorológicas adversas.',
+   270→      severity: 'warning',
+   271→      state: 'en_proceso',
+   272→      meta: { cogrig_deteccion: true, indice_alerta: 1 },
+   273→    },
+   274→    {
+   275→      title: 'Alerta Roja - Incendio Forestal descontrolado',
+   276→      description:
+   277→        'CONAF declara Alerta Roja por incendio forestal descontrolado con amenaza a viviendas. Se activa apoyo de helicóptero MAULEN y aeronaves.',
+   278→      severity: 'critical',
+   279→      state: 'activa',
+   280→      meta: { cogrig_deteccion: true, indice_alerta: 2 },
+   281→    },
+   282→  ]
+   283→  const v = pickVariant(variants, criticalOnly)
+   284→  return {
+   285→    id: uuidv4(),
+   286→    externalId: makeExternalId('CONAF'),
+   287→    sourceCode: 'conaf',
+   288→    sourceName: SOURCE_NAMES.conaf,
+   289→    category: 'incendio',
+   290→    subcategory: null,
+   291→    severity: v.severity,
+   292→    state: v.state,
+   293→    title: v.title,
+   294→    description: v.description,
+   295→    location: `Sector forestal, ${commune}`,
+   296→    lat: coord.lat,
+   297→    lng: coord.lng,
+   298→    region: 'Valparaíso',
+   299→    commune,
+   300→    meta: {
+   301→      hectareas_afectadas: randInt(1, 80),
+   302→      brigadas_desplegadas: randInt(2, 8),
+   303→      ...(v.meta ?? {}),
+   304→    },
+   305→    issuedAt: new Date().toISOString(),
+   306→  }
+   307→}
+   308→
+   309→// Tide cycle simulator (SHOA)
+   310→// Cycle: alta -> media (descendente) -> baja -> media (ascendente) -> alta ...
+   311→// Realistic Chilean Pacific coast tides are semi-diurnal (~12h25m); we accelerate
+   312→// the cadence for the simulation so the dashboard can visualise the cycle.
+   313→const TIDE_CYCLE: Array<'alta' | 'media' | 'baja'> = ['alta', 'media', 'baja', 'media']
+   314→let tideIndex = 0
+   315→
+   316→function genShoaMarea(): BroadcastAlert {
+   317→  const phase = TIDE_CYCLE[tideIndex % TIDE_CYCLE.length]
+   318→  tideIndex = (tideIndex + 1) % TIDE_CYCLE.length
+   319→
+   320→  // Coastal coords near Viña del Mar / Valparaíso shoreline
+   321→  const coord = {
+   322→    lat: round(rand(-33.03, -33.02), 4),
+   323→    lng: round(rand(-71.58, -71.54), 4),
+   324→  }
+   325→  const titles: Record<string, string> = {
+   326→    alta: 'Marea Alta (Pleamar)',
+   327→    media: 'Marea Media',
+   328→    baja: 'Marea Baja (Bajamar)',
+   329→  }
+   330→  const descs: Record<string, string> = {
+   331→    alta:
+   332→      'SHOA reporta pleamar en el litoral de Viña del Mar. Nivel del mar alcanza máximo predictivo. Restringir faenas portuarias menores en zonas sensibles.',
+   333→    media:
+   334→      'SHOA reporta marea media. Transición estable entre pleamar y bajamar. Condiciones normales de navegación.',
+   335→    baja:
+   336→      'SHOA reporta bajamar en el litoral de Viña del Mar. Nivel del mar alcanza mínimo predictivo. Considerar calado para embarcaciones menores.',
+   337→  }
+   338→  const heights: Record<string, number> = {
+   339→    alta: rand(1.5, 2.0),
+   340→    media: rand(0.7, 1.2),
+   341→    baja: rand(0.2, 0.6),
+   342→  }
+   343→  return {
+   344→    id: uuidv4(),
+   345→    externalId: makeExternalId('SHOA-MAREA'),
+   346→    sourceCode: 'shoa',
+   347→    sourceName: SOURCE_NAMES.shoa,
+   348→    category: 'marea',
+   349→    subcategory: phase,
+   350→    severity: 'info',
+   351→    state: 'activa',
+   352→    title: titles[phase],
+   353→    description: descs[phase],
+   354→    location: 'Litoral de Viña del Mar',
+   355→    lat: coord.lat,
+   356→    lng: coord.lng,
+   357→    region: 'Valparaíso',
+   358→    commune: 'Viña del Mar',
+   359→    meta: {
+   360→      altura_m: heights[phase].toFixed(2),
+   361→      fase: phase,
+   362→      ciclo: 'semidiurno',
+   363→      hora_referencia_utc: new Date().toISOString(),
+   364→    },
+   365→    issuedAt: new Date().toISOString(),
+   366→  }
+   367→}
+   368→
+   369→function genShoaMet(): BroadcastAlert {
+   370→  const coord = randCoord()
+   371→  type Variant = {
+   372→    title: string
+   373→    description: string
+   374→    severity: Severity
+   375→    meta?: Record<string, unknown> | null
+   376→  }
+   377→  const variants: Variant[] = [
+   378→    {
+   379→      title: 'Boletín Meteorológico Marítimo',
+   380→      description:
+   381→        'SHOA emite boletín meteorológico marítimo. Viento del suroeste 20-30 nudos, mar de fondo 2.5 m. Condiciones adversas para embarcaciones menores.',
+   382→      severity: 'watch',
+   383→      meta: { viento_nudos: randInt(20, 35), mar_fondo_m: rand(2, 3.5).toFixed(1) },
+   384→    },
+   385→    {
+   386→      title: 'Aviso de Mal Tiempo Costero',
+   387→      description:
+   388→        'SHOA emite aviso de mal tiempo para zona costera de Valparaíso. Mar de leva esperada en las próximas 12 horas.',
+   389→      severity: 'warning',
+   390→      meta: { mar_leva_m: rand(2.5, 4.0).toFixed(1) },
+   391→    },
+   392→  ]
+   393→  const v = pick(variants)
+   394→  return {
+   395→    id: uuidv4(),
+   396→    externalId: makeExternalId('SHOA-MET'),
+   397→    sourceCode: 'shoa',
+   398→    sourceName: SOURCE_NAMES.shoa,
+   399→    category: 'meteorologica',
+   400→    subcategory: null,
+   401→    severity: v.severity,
+   402→    state: 'activa',
+   403→    title: v.title,
+   404→    description: v.description,
+   405→    location: 'Litoral de Valparaíso',
+   406→    lat: coord.lat,
+   407→    lng: coord.lng,
+   408→    region: 'Valparaíso',
+   409→    commune: 'Valparaíso',
+   410→    meta: v.meta ?? null,
+   411→    issuedAt: new Date().toISOString(),
+   412→  }
+   413→}
+   414→
+   415→function genGuardiaMarina(): BroadcastAlert {
+   416→  // Maritime coords slightly offshore of Valparaíso bay
+   417→  const coord = {
+   418→    lat: round(rand(-33.05, -33.01), 4),
+   419→    lng: round(rand(-71.65, -71.55), 4),
+   420→  }
+   421→  type Variant = {
+   422→    title: string
+   423→    description: string
+   424→    severity: Severity
+   425→    meta?: Record<string, unknown> | null
+   426→  }
+   427→  const variants: Variant[] = [
+   428→    {
+   429→      title: 'Aviso a la Navegación',
+   430→      description:
+   431→        'Guardia Marina emite aviso a la navegación: artefacto naval a la deriva reportado en sector de bahía de Valparaíso. Tránsito con precaución.',
+   432→      severity: 'watch',
+   433→      meta: { tipo_aviso: 'deriva' },
+   434→    },
+   435→    {
+   436→      title: 'Viento y Mar Lluvia',
+   437→      description:
+   438→        'Guardia Marina reporta viento y mar lluvia en sector costero. Se recomienda a embarcaciones menores permanecer en puerto.',
+   439→      severity: 'warning',
+   440→      meta: { viento_kmh: randInt(40, 70) },
+   441→    },
+   442→    {
+   443→      title: 'Zona de exclusión temporal',
+   444→      description:
+   445→        'Guardia Marina establece zona de exclusión temporal por operación de rescate marítimo. Coordenadas comunicadas por canal 16 VHF.',
+   446→      severity: 'warning',
+   447→      meta: { canal: 'VHF 16', operacion: 'rescate' },
+   448→    },
+   449→  ]
+   450→  const v = pick(variants)
+   451→  return {
+   452→    id: uuidv4(),
+   453→    externalId: makeExternalId('GM'),
+   454→    sourceCode: 'guardiamarina',
+   455→    sourceName: SOURCE_NAMES.guardiamarina,
+   456→    category: 'transito',
+   457→    subcategory: 'maritimo',
+   458→    severity: v.severity,
+   459→    state: 'activa',
+   460→    title: v.title,
+   461→    description: v.description,
+   462→    location: 'Bahía de Valparaíso / Litoral',
+   463→    lat: coord.lat,
+   464→    lng: coord.lng,
+   465→    region: 'Valparaíso',
+   466→    commune: 'Valparaíso',
+   467→    meta: v.meta ?? null,
+   468→    issuedAt: new Date().toISOString(),
+   469→  }
+   470→}
+   471→
+   472→function genCbv2(criticalOnly: boolean = false): BroadcastAlert {
+   473→  const coord = randCoord()
+   474→  const commune = communeForCoord()
+   475→  type Variant = {
+   476→    title: string
+   477→    description: string
+   478→    severity: Severity
+   479→    state: State
+   480→    category: string
+   481→    meta?: Record<string, unknown> | null
+   482→  }
+   483→  const variants: Variant[] = [
+   484→    {
+   485→      title: 'Llamado de Emergencia',
+   486→      description:
+   487→        'CBV2 2da Compañía de Bomberos de Viña del Mar atiende llamado de emergencia. Unidades desplazadas al sector reportado.',
+   488→      severity: 'watch',
+   489→      state: 'en_proceso',
+   490→      category: 'incendio',
+   491→      meta: { unidades: randInt(2, 4) },
+   492→    },
+   493→    {
+   494→      title: 'Incendio Estructural',
+   495→      description:
+   496→        'CBV2 combate incendio estructural en vivienda del sector. Trabajo de extinción y ventilación en progreso. Bomberos solicitan cortar suministro eléctrico.',
+   497→      severity: 'warning',
+   498→      state: 'activa',
+   499→      category: 'incendio',
+   500→      meta: { viviendas_afectadas: randInt(1, 3) },
+   501→    },
+   502→    {
+   503→      title: 'Rescate Vehicular',
+   504→      description:
+   505→        'CBV2 realiza rescate vehicular en ruta. Apoyo médico y corte de tránsito coordinado con Carabineros.',
+   506→      severity: 'warning',
+   507→      state: 'en_proceso',
+   508→      category: 'transito',
+   509→      meta: { tipo: 'rescate_vehicular' },
+   510→    },
+   511→    {
+   512→      title: 'Emergencia con Materiales Peligrosos',
+   513→      description:
+   514→        'CBV2 activa protocolo de materiales peligrosos en sector industrial. Perímetro de seguridad establecido.',
+   515→      severity: 'critical',
+   516→      state: 'activa',
+   517→      category: 'quimico',
+   518→      meta: { protocolo: 'hazmat' },
+   519→    },
+   520→  ]
+   521→  const v = pickVariant(variants, criticalOnly)
+   522→  return {
+   523→    id: uuidv4(),
+   524→    externalId: makeExternalId('CBV2'),
+   525→    sourceCode: 'cbv2',
+   526→    sourceName: SOURCE_NAMES.cbv2,
+   527→    category: v.category,
+   528→    subcategory: null,
+   529→    severity: v.severity,
+   530→    state: v.state,
+   531→    title: v.title,
+   532→    description: v.description,
+   533→    location: `Sector ${commune}`,
+   534→    lat: coord.lat,
+   535→    lng: coord.lng,
+   536→    region: 'Valparaíso',
+   537→    commune,
+   538→    meta: v.meta ?? null,
+   539→    issuedAt: new Date().toISOString(),
+   540→  }
+   541→}
+   542→
+   543→function genCarabineros(criticalOnly: boolean = false): BroadcastAlert {
+   544→  const coord = randCoord()
+   545→  const commune = communeForCoord()
+   546→  type Variant = {
+   547→    title: string
+   548→    description: string
+   549→    severity: Severity
+   550→    state: State
+   551→    meta?: Record<string, unknown> | null
+   552→  }
+   553→  const variants: Variant[] = [
+   554→    {
+   555→      title: 'Nueva alerta de seguridad',
+   556→      description:
+   557→        'Carabineros reporta nueva alerta de seguridad en sector urbano. Patrullas desplegadas para disuadir y proteger a la población.',
+   558→      severity: 'watch',
+   559→      state: 'en_proceso',
+   560→      meta: { patrullas: randInt(2, 6) },
+   561→    },
+   562→    {
+   563→      title: 'Alerta de seguridad - Robo con intimidación',
+   564→      description:
+   565→        'Carabineros reporta robo con intimidación en sector comercial. Perímetro establecido, búsqueda de antecedentes en curso.',
+   566→      severity: 'warning',
+   567→      state: 'en_proceso',
+   568→      meta: { tipo: 'robo_intimidacion' },
+   569→    },
+   570→    {
+   571→      title: 'Alerta de seguridad - Sospechoso armado',
+   572→      description:
+   573→        'Carabineros activa protocolo de seguridad por sospechoso armado en sector. Se solicita a vecinos resguardarse en interiores.',
+   574→      severity: 'critical',
+   575→      state: 'activa',
+   576→      meta: { protocolo: 'red_cobro' },
+   577→    },
+   578→  ]
+   579→  const v = pickVariant(variants, criticalOnly)
+   580→  return {
+   581→    id: uuidv4(),
+   582→    externalId: makeExternalId('CARAB'),
+   583→    sourceCode: 'carabineros',
+   584→    sourceName: SOURCE_NAMES.carabineros,
+   585→    category: 'seguridad',
+   586→    subcategory: null,
+   587→    severity: v.severity,
+   588→    state: v.state,
+   589→    title: v.title,
+   590→    description: v.description,
+   591→    location: `Sector ${commune}`,
+   592→    lat: coord.lat,
+   593→    lng: coord.lng,
+   594→    region: 'Valparaíso',
+   595→    commune,
+   596→    meta: v.meta ?? null,
+   597→    issuedAt: new Date().toISOString(),
+   598→  }
+   599→}
+   600→
+   601→function genRadio(): BroadcastAlert {
+   602→  const coord = randCoord()
+   603→  const commune = communeForCoord()
+   604→  type Variant = {
+   605→    title: string
+   606→    description: string
+   607→    severity: Severity
+   608→    state: State
+   609→    meta?: Record<string, unknown> | null
+   610→  }
+   611→  const variants: Variant[] = [
+   612→    {
+   613→      title: 'Comunicado de emergencia vía radio',
+   614→      description:
+   615→        'Radioemisoras locales transmiten comunicado de emergencia. Información oficial sobre evento activo en la comuna.',
+   616→      severity: 'info',
+   617→      state: 'activa',
+   618→      meta: { frecuencia: 'AM 1360 kHz' },
+   619→    },
+   620→    {
+   621→      title: 'Boletín radioperiodístico de emergencia',
+   622→      description:
+   623→        'Boletín radioperiodístico de emergencia: coyuntura operativa en sector, recomendaciones a la población civil.',
+   624→      severity: 'watch',
+   625→      state: 'activa',
+   626→      meta: { frecuencia: 'FM 89.3 MHz' },
+   627→    },
+   628→  ]
+   629→  const v = pick(variants)
+   630→  return {
+   631→    id: uuidv4(),
+   632→    externalId: null,
+   633→    sourceCode: 'radio',
+   634→    sourceName: SOURCE_NAMES.radio,
+   635→    category: 'radio',
+   636→    subcategory: null,
+   637→    severity: v.severity,
+   638→    state: v.state,
+   639→    title: v.title,
+   640→    description: v.description,
+   641→    location: `Cobertura ${commune}`,
+   642→    lat: coord.lat,
+   643→    lng: coord.lng,
+   644→    region: 'Valparaíso',
+   645→    commune,
+   646→    meta: v.meta ?? null,
+   647→    issuedAt: new Date().toISOString(),
+   648→  }
+   649→}
+   650→
+   651→// Regular (non-critical) generator pool.
+   652→// SHOA marea alerts are produced by their own tide timer, so they are
+   653→// NOT part of the random pool to avoid double-firing the same source.
+   654→// Each generator is called WITHOUT `criticalOnly`, so it defaults to false
+   655→// and only emits info/watch/warning variants (critical variants are filtered
+   656→// out by `pickVariant`). This is what keeps critical alerts globally sparse.
+   657→const REGULAR_GENERATORS: Array<() => BroadcastAlert> = [
+   658→  genSenapred,
+   659→  genConaf,
+   660→  genShoaMet,
+   661→  genGuardiaMarina,
+   662→  genCbv2,
+   663→  genCarabineros,
+   664→  genRadio,
+   665→]
+   666→
+   667→// Generators capable of producing critical variants.
+   668→const CRITICAL_GENERATORS: Array<() => BroadcastAlert> = [
+   669→  () => genSenapred(true),
+   670→  () => genConaf(true),
+   671→  () => genCbv2(true),
+   672→  () => genCarabineros(true),
+   673→]
+   674→
+   675→function generateAlert(): BroadcastAlert {
+   676→  // Critical alerts must remain globally sparse (~5% of total).
+   677→  if (Math.random() < 0.05) {
+   678→    return generateCriticalAlert()
+   679→  }
+   680→  return pick(REGULAR_GENERATORS)()
+   681→}
+   682→
+   683→function generateCriticalAlert(): BroadcastAlert {
+   684→  // Pick a critical-capable source (SENAPRED, CONAF, CBV2 or Carabineros)
+   685→  // and emit one of its critical variants (Alerta Roja, etc.).
+   686→  return pick(CRITICAL_GENERATORS)()
+   687→}
+   688→
+   689→// ============================================================================
+   690→// Stats computation
+   691→// ============================================================================
+   692→function computeStats(connectedClients: number): Stats {
+   693→  const stats: Stats = {
+   694→    total: history.length,
+   695→    bySource: {},
+   696→    bySeverity: {},
+   697→    byCategory: {},
+   698→    byState: {},
+   699→    connectedClients,
+   700→    generatedAt: new Date().toISOString(),
+   701→  }
+   702→  for (const a of history) {
+   703→    stats.bySource[a.sourceCode] = (stats.bySource[a.sourceCode] ?? 0) + 1
+   704→    stats.bySeverity[a.severity] = (stats.bySeverity[a.severity] ?? 0) + 1
+   705→    stats.byCategory[a.category] = (stats.byCategory[a.category] ?? 0) + 1
+   706→    stats.byState[a.state] = (stats.byState[a.state] ?? 0) + 1
+   707→  }
+   708→  return stats
+   709→}
+   710→
+   711→// ============================================================================
+   712→// Socket.IO server setup
+   713→// ============================================================================
+   714→const httpServer = createServer()
+   715→const io = new Server(httpServer, {
+   716→  // DO NOT change the path, it is used by Caddy to forward the request.
+   717→  path: '/',
+   718→  cors: {
+   719→    origin: '*',
+   720→    methods: ['GET', 'POST'],
+   721→  },
+   722→  pingTimeout: 60000,
+   723→  pingInterval: 25000,
+   724→})
+   725→
+   726→io.on('connection', (socket) => {
+   727→  console.log(`[alerts-service] client connected: ${socket.id}`)
+   728→  // On connect, send the last 20 alerts so a fresh page load has data.
+   729→  socket.emit('history', getRecentAlerts(20))
+   730→
+   731→  // Send immediate stats snapshot to the new client as well.
+   732→  socket.emit('stats', computeStats(io.engine.clientsCount))
+   733→
+   734→  socket.on('disconnect', (reason) => {
+   735→    console.log(`[alerts-service] client disconnected: ${socket.id} (${reason})`)
+   736→  })
+   737→
+   738→  socket.on('error', (err) => {
+   739→    console.error(`[alerts-service] socket error (${socket.id}):`, err)
+   740→  })
+   741→})
+   742→
+   743→// ============================================================================
+   744→// Emit helpers
+   745→// ============================================================================
+   746→function emitAlert(alert: BroadcastAlert): void {
+   747→  pushAlert(alert)
+   748→  io.emit('alert', alert)
+   749→  console.log(
+   750→    `[alert] [${alert.sourceCode}] ${alert.severity.toUpperCase()} - ${alert.title}`,
+   751→  )
+   752→}
+   753→
+   754→// ============================================================================
+   755→// Timers
+   756→// ============================================================================
+   757→let alertTimer: ReturnType<typeof setTimeout> | null = null
+   758→let tideTimer: ReturnType<typeof setTimeout> | null = null
+   759→let statsTimer: ReturnType<typeof setInterval> | null = null
+   760→
+   761→function scheduleNextAlert(): void {
+   762→  const delayMs = rand(8000, 20000) // 8-20s random
+   763→  alertTimer = setTimeout(() => {
+   764→    emitAlert(generateAlert())
+   765→    scheduleNextAlert()
+   766→  }, delayMs)
+   767→}
+   768→
+   769→function scheduleNextTide(): void {
+   770→  // Tide cycle fires every 25-45s, cycling alta -> media -> baja -> media ...
+   771→  const delayMs = rand(25000, 45000)
+   772→  tideTimer = setTimeout(() => {
+   773→    emitAlert(genShoaMarea())
+   774→    scheduleNextTide()
+   775→  }, delayMs)
+   776→}
+   777→
+   778→function scheduleStats(): void {
+   779→  statsTimer = setInterval(() => {
+   780→    const stats = computeStats(io.engine.clientsCount)
+   781→    io.emit('stats', stats)
+   782→    console.log(
+   783→      `[stats] clients=${stats.connectedClients} total=${stats.total} ` +
+   784→        `sources=${Object.keys(stats.bySource).length} ` +
+   785→        `critical=${stats.bySeverity.critical ?? 0}`,
+   786→    )
+   787→  }, 15000) // every 15s as required
+   788→}
+   789→
+   790→// ============================================================================
+   791→// Bootstrap
+   792→// ============================================================================
+   793→httpServer.listen(PORT, () => {
+   794→  console.log('============================================================')
+   795→  console.log(`[alerts-service] WebSocket server running on port ${PORT}`)
+   796→  console.log(`[alerts-service]   path: '/'   (Caddy forwarding)`)
+   797→  console.log(`[alerts-service]   CORS: origin '*'`)
+   798→  console.log(`[alerts-service]   Viña del Mar center: ${VINA_CENTER.lat}, ${VINA_CENTER.lng}`)
+   799→  console.log(
+   800→    `[alerts-service]   Sources: ${Object.keys(SOURCE_NAMES).join(', ')}`,
+   801→  )
+   802→  console.log(
+   803→    `[alerts-service]   Events: 'history' (last 20 on connect), 'alert' (new), 'stats' (every 15s)`,
+   804→  )
+   805→  console.log('============================================================')
+   806→
+   807→  // Seed some initial history so a freshly-loaded page immediately has data.
+   808→  for (let i = 0; i < 20; i++) {
+   809→    pushAlert(generateAlert())
+   810→  }
+   811→  // Force the first marea alert to be "alta" so the cycle starts cleanly.
+   812→  pushAlert(genShoaMarea())
+   813→
+   814→  scheduleNextAlert()
+   815→  scheduleNextTide()
+   816→  scheduleStats()
+   817→
+   818→  console.log('[alerts-service] bootstrapped. Awaiting client connections...')
+   819→})
+   820→
+   821→// ============================================================================
+   822→// Graceful shutdown (SIGTERM / SIGINT)
+   823→// ============================================================================
+   824→let shuttingDown = false
+   825→function shutdown(signal: string): void {
+   826→  if (shuttingDown) return
+   827→  shuttingDown = true
+   828→  console.log(`[alerts-service] received ${signal}, shutting down gracefully...`)
+   829→
+   830→  if (alertTimer) clearTimeout(alertTimer)
+   831→  if (tideTimer) clearTimeout(tideTimer)
+   832→  if (statsTimer) clearInterval(statsTimer)
+   833→
+   834→  // Close all open connections first, then the HTTP server.
+   835→  io.close(() => {
+   836→    httpServer.close(() => {
+   837→      console.log('[alerts-service] server closed cleanly.')
+   838→      process.exit(0)
+   839→    })
+   840→  })
+   841→
+   842→  // Failsafe: if for some reason close hangs, force exit after 5s.
+   843→  setTimeout(() => {
+   844→    console.warn('[alerts-service] force-exit after 5s timeout.')
+   845→    process.exit(1)
+   846→  }, 5000).unref()
+   847→}
+   848→
+   849→process.on('SIGTERM', () => shutdown('SIGTERM'))
+   850→process.on('SIGINT', () => shutdown('SIGINT'))
+   851→process.on('uncaughtException', (err) => {
+   852→  console.error('[alerts-service] uncaughtException:', err)
+   853→})
+   854→process.on('unhandledRejection', (reason) => {
+   855→  console.error('[alerts-service] unhandledRejection:', reason)
+   856→})
+   857→

@@ -14,11 +14,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CODEM-VDM | Centro de Operaciones de Emergencias - Viña del Mar",
+  title:
+    "Comando de Emergencia Regional | VeltrixIntegra Ecosistema Digital 360",
   description:
-    "Dashboard integral de gestión de emergencias y catástrofes para Viña del Mar y Región de Valparaíso. Integra SENAPRED, CONAF/COGRIG, SHOA, Guardia Marina, Bomberos CBV2, Carabineros y Radio. Mapa georreferenciado, fichas FIBER, notificaciones en tiempo real y panel de cumplimiento legal.",
+    "Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360 · Viña del Mar, Región de Valparaíso. Plataforma integral de gestión de emergencias que integra SENAPRED, CONAF, SHOA, Bomberos CBV2, Carabineros y Radio. Mapa georreferenciado, fichas FIBER, notificaciones en tiempo real y panel de cumplimiento legal.",
   keywords: [
+    "Comando de Emergencia Regional",
+    "VeltrixIntegra Ecosistema Digital 360",
     "Viña del Mar",
+    "Región de Valparaíso",
     "SENAPRED",
     "CONAF",
     "COGRIG",
@@ -28,17 +32,23 @@ export const metadata: Metadata = {
     "emergencias",
     "catástrofes",
     "FIBER",
-    "Valparaíso",
     "protección civil",
+    "gestión de emergencias",
   ],
-  authors: [{ name: "Municipalidad de Viña del Mar - CODEM" }],
+  authors: [
+    {
+      name: "Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360",
+    },
+  ],
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/logo.svg",
   },
   openGraph: {
-    title: "CODEM-VDM | Centro de Operaciones de Emergencias",
-    description: "Monitoreo y gestión integral de emergencias - Viña del Mar",
+    title:
+      "Comando de Emergencia Regional | VeltrixIntegra Ecosistema Digital 360",
+    description:
+      "Monitoreo y gestión integral de emergencias — Viña del Mar, Región de Valparaíso",
     type: "website",
   },
 };

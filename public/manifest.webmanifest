@@ -1,7 +1,7 @@
 {
-  "name": "CODEM-VDM · Centro de Operaciones de Emergencias",
-  "short_name": "CODEM-VDM",
-  "description": "Dashboard integral de gestión de emergencias para Viña del Mar y Región de Valparaíso. Integra SENAPRED, CONAF, SHOA, Guardia Marina, Bomberos CBV2, Carabineros y Radio.",
+  "name": "Comando de Emergencia Regional",
+  "short_name": "Comando Regional",
+  "description": "Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360 · Viña del Mar, Región de Valparaíso. Plataforma integral de gestión de emergencias que integra SENAPRED, CONAF, SHOA, Bomberos CBV2, Carabineros y Radio.",
   "lang": "es-CL",
   "dir": "ltr",
   "start_url": "/",

@@ -1,0 +1,238 @@
+     1→# Worklog - Dashboard de Emergencias Viña del Mar
+     2→
+     3→Proyecto: Dashboard integral de gestión de emergencias para Viña del Mar, Chile.
+     4→Integra alertas de SENAPRED, CONAF/COGRIG, SHOA (meteorología + mareas), Guardia Marina, Bomberos CBV2, Carabineros y Radio.
+     5→Incluye mapa georreferenciado de catástrofes, fichas FIBER, panel de cumplimiento legal y notificaciones en tiempo real.
+     6→
+     7→---
+     8→Task ID: 0
+     9→Agent: Main Orchestrator
+    10→Task: Inicializar plan y arquitectura del dashboard
+    11→
+    12→Work Log:
+    13→- Análisis de proyecto Next.js 16 existente (shadcn/ui + Prisma)
+    14→- Definición de arquitectura:
+    15→  * Mini-service WebSocket en puerto 3003 para broadcasts de alertas
+    16→  * API routes de Next.js: alerts, fichas, incidents, sources, compliance, stats
+    17→  * Frontend: dashboard con mapa Leaflet + feed en tiempo real + fichas FIBER + panel cumplimiento
+    18→  * Service Worker + Notification API para alertas con página inactiva
+    19→- Paleta: gradientes azul petróleo -> arena dorada (colores municipalidad de Viña del Mar, suaves y amigables a la vista)
+    20→
+    21→Stage Summary:
+    22→- Plan listo para ejecución en paralelo
+    23→- Subagentes se asignarán a Tasks 2-a (mini-service WS), 2-b (API routes), 3 (frontend dashboard)
+    24→
+    25→---
+    26→Task ID: 2-a
+    27→Agent: full-stack-developer (backend API + seed)
+    28→Task: Crear todas las rutas API de App Router (sources, alerts, incidents + [id], fichas + [id], compliance, stats, audit), el script de semilla `prisma/seed.ts`, ejecutar `db:push` y el seed, y dejar todo listo para el frontend.
+    29→
+    30→Work Log:
+    31→- Lectura de `worklog.md`, `prisma/schema.prisma` y `src/lib/db.ts` (singleton de Prisma ya configurado).
+    32→- Lectura del mini-service WebSocket (puerto 3003) para entender el contrato `BroadcastAlert` y alinear nombres de fuentes/categorías.
+    33→- Creación del helper `src/lib/audit.ts` con `writeAudit()` y `extractRequestMeta()` (extrae IP desde `x-forwarded-for`/`x-real-ip` y User-Agent) — registro trazable según Ley 19.628 art. 2.
+    34→- `GET /api/sources` → lista ordenada por `code` con `_count.alerts` para badges del frontend.
+    35→- `GET /api/alerts` → soporta `limit` (default 50, max 200), `source`, `severity`, `category`, `state`, `commune`; incluye relación `source`. Devuelve `[]` si no hay datos.
+    36→- `GET /api/incidents` y `POST /api/incidents` → POST valida con zod (incluye `meta` como objeto y lo stringifica al guardar) y escribe AuditLog (`action=create`, `entity=Incident`).
+    37→- `PATCH /api/incidents/[id]` → actualiza `state`, `severity`, `affected`, `evacuated`, `resources`, `closedAt`; registra AuditLog (`action=update`) con `before/after`. Incluye GET por id.
+    38→- `GET /api/fichas` y `POST /api/fichas` → GET ordena por prioridad de riesgo (critico > alto > medio > bajo) y luego `updatedAt DESC` (en JS tras fetch, evita raw SQL); POST autogenera código `FIBER-{AÑO}-{XXXXX}` calculando el máximo existente.
+    39→- `GET /api/fichas/[id]` y `PATCH /api/fichas/[id]` → GET simple, PATCH actualiza riesgo/estado/notas/asignación/necesidades con AuditLog.
+    40→- `GET /api/compliance` → JSON estático enriquecido con marco normativo chileno: SENAPRED (Ley 21.151), Política Nacional de Seguridad Escolar, ONEMI legacy, Plan DMC; Ley 19.628, 21.099, 21.519; ISO 27001, NIST CSF, CSIRT Nacional, OWASP; DFL 536, Plan DAE, Ley 18.243; `dataHandling` con principios, retención, cifrado, auditoría y consentimiento.
+    41→- `GET /api/stats` → agrega `alerts.by{Source,Severity,Category,State}`, `incidents.by{Type,Nature,State}` + `active`, `fichas.by{RiskLevel,Status,Commune}`, `sources`, `generatedAt`. Estructura siempre válida aunque DB esté vacía.
+    42→- `GET /api/audit` → filtra por `entity`, `actor`, `action`, `limit` (default 100, max 500). Ordenado por `createdAt DESC`.
+    43→- `prisma/seed.ts` → idempotente: upserts por `Source.code` y `FichaFIBER.code`; incidentes marcados con `meta.seed=true` y recreados. 7 fuentes, 15 incidentes (incendio_forestal/urbano, sismo, inundacion, deslizamiento, quimico, accidente, delito) repartidos en Viña del Mar/Valparaíso/Concón/Quilpué con coordenadas reales (~ -33.00 a -33.07, -71.50 a -71.62); 12 fichas con RUTs válidos (DV calculada), variedad de riskLevel/status/commune, varias con needsEvacuation/needsMedication; 5 AuditLog de ejemplo. Helper `formatRut` genera XX.XXX.XXX-X.
+    44→- Script npm `db:seed` añadido a `package.json` (corre `bun prisma/seed.ts`).
+    45→- `bun run db:push` ejecutado (schema ya estaba en sync; regeneró Prisma Client v6.19.2).
+    46→- `bun run db:seed` ejecutado: 7 fuentes, 15 incidentes, 12 fichas, 5 audit-logs.
+    47→- Smoke test en vivo contra dev server: `/api/sources`, `/api/stats`, `/api/fichas`, `/api/incidents` (POST + PATCH), `/api/fichas/[id]` (POST + PATCH + 404 + 422), `/api/compliance`, `/api/audit` — todos responden correctamente. AuditLog creado con IP `::1` y user-agent `curl/8.14.1`.
+    48→- Bug encontrado y corregido: `z.record(z.unknown())` está roto en zod v4.3.5 (lanza `Cannot read properties of undefined (reading '_zod')`). Cambiado a `z.record(z.string(), z.unknown())` en `incidents/route.ts`. Repro y fix verificados en Bun.
+    49→- `bun run lint` pasa limpio (sin warnings ni errores).
+    50→
+    51→Stage Summary:
+    52→- **API contract completo** bajo `src/app/api/`:
+    53→  * `GET /api/sources`
+    54→  * `GET /api/alerts?limit&source&severity&category&state&commune`
+    55→  * `GET /api/incidents` · `POST /api/incidents`
+    56→  * `GET /api/incidents/[id]` · `PATCH /api/incidents/[id]`
+    57→  * `GET /api/fichas?commune&riskLevel&status&limit` · `POST /api/fichas`
+    58→  * `GET /api/fichas/[id]` · `PATCH /api/fichas/[id]`
+    59→  * `GET /api/compliance` (estático, panel de cumplimiento legal chileno)
+    60→  * `GET /api/stats` (agregaciones)
+    61→  * `GET /api/audit?limit&entity&actor&action`
+    62→- **Helpers**: `src/lib/audit.ts` (`writeAudit`, `extractRequestMeta`).
+    63→- **Seed** `prisma/seed.ts` idempotente + script `db:seed`. DB poblada: 7 sources, 15 incidents, 12 fichas FIBER, 5 audit logs.
+    64→- **Códigos FIBER**: generados como `FIBER-{año}-{XXXXX}` (año actual). Próximo disponible tras seed = `FIBER-2026-00013`.
+    65→- **Validaciones**: zod con `safeParse` → 422 + issues. 404 cuando el recurso no existe. 500 controlado en try/catch. Todos los GET devuelven `[]` o estructura vacía si no hay datos.
+    66→- **Trazabilidad**: POST/PATCH de incidents y fichas escriben `AuditLog` con IP, User-Agent y diff `before/after` para cumplimiento Ley 19.628.
+    67→- **Lint**: 0 errores.
+    68→- **Pendiente para el agente de frontend**: consumir estos endpoints según el contrato; el feed de alertas en tiempo real sigue viniendo por el WebSocket del mini-service en puerto 3003 (no se modificó).
+    69→
+    70→---
+    71→Task ID: 3
+    72→Agent: full-stack-developer (frontend dashboard)
+    73→Task: Construir el dashboard CODEM-VDM completo (frontend): Service Worker + PWA manifest, tipos compartidos, helpers de severidad, hook zustand para el feed WS, y los 8 paneles del dashboard (alert-card, live-feed, incident-map, stats-overview, charts-panel, fichas-panel, compliance-panel, incident-form) más la composición final en src/app/page.tsx con header sticky + reloj en vivo + modo oscuro + footer sticky.
+    74→
+    75→Work Log:
+    76→- Lectura de `worklog.md`, `agent-ctx/2-a-*.md`, `globals.css`, `layout.tsx`, `package.json`, componentes shadcn existentes (card, button, badge, dialog, table, form, select, tabs, accordion, tooltip, dropdown-menu, checkbox, skeleton, sonner), APIs (`/api/sources`, `/api/alerts`, `/api/incidents`, `/api/fichas`, `/api/compliance`, `/api/stats`), y `mini-services/alerts-service/index.ts` para confirmar el contrato WS.
+    77→- `public/sw.js` — Service Worker: `install`→skipWaiting, `activate`→clients.claim, `push` + `message` tipo NOTIFY, `showNotification` con `/logo.svg` y `requireInteraction` para críticas, `notificationclick` enfoca/abre la pestaña.
+    78→- `public/manifest.webmanifest` — PWA manifest (CODEM-VDM, standalone, theme #3a78b8, icon /logo.svg).
+    79→- `src/lib/types.ts` — espejo TS del contrato (BroadcastAlert, Stats, Incident, FichaFIBER, Source, ComplianceData con ComplianceItem+DataHandling, ApiStats, enums).
+    80→- `src/lib/severity.ts` — helpers (severityColor/Border/TextColor/Label, categoryLabel, incidentTypeLabel, natureLabel, stateLabels, riskLevelBadgeClass, sourceColor con paleta Viña sin indigo, sourceShortLabel, incidentTypeColor oklch).
+    81→- `src/hooks/use-alerts-socket.tsx` — store zustand + hook con conexión única compartida al WS vía `io('/', {query:{XTransformPort:'3003'}})`. En critical: Notification.requestPermission una sola vez + postMessage al SW + toast.error sonner. En warning: toast.warning. Ref-counted para desconexión limpia.
+    82→- `src/components/theme-provider.tsx` — wrapper next-themes (attribute="class", defaultTheme light, enableSystem).
+    83→- `src/components/dashboard/alert-card.tsx` — tarjeta con borde-izq de color por severidad, icono estático (Info/Eye/AlertTriangle/Siren), badge fuente (color del source), descripción truncable >180 chars, meta chips, time-ago con date-fns locale es, framer-motion entrada slide+fade.
+    84→- `src/components/dashboard/live-feed.tsx` — panel "En Vivo" con dot pulsante + status + count, filtros chip (Todas/SENAPRED/CONAF/SHOA/CBV2/Carabineros/Radio), lista scrollable max-h-[28rem], AnimatePresence, empty-state.
+    85→- `src/components/dashboard/incident-map.tsx` — mapa Leaflet (react-leaflet v5, ssr:false desde la página), centrado en Viña [-33.0245,-71.5517] zoom 12, tiles OSM. Circle por incidente (radio=radiusMeters, color por tipo), Popup con título+badges+afectados/evacuados+recursos, CircleMarker pulsante (`pulse-critical`) para críticas activas, overlay de últimas 10 alertas en vivo como CircleMarker pequeños con color de fuente. Leyenda glass top-right + toggles Checkbox (Incidentes / Alertas en vivo). FitBounds en carga. Altura responsive h-[22rem] móvil / h-[32rem] desktop.
+    86→- `src/components/dashboard/stats-overview.tsx` — 4 KPI cards: Alertas Activas (WS byState), Incidentes Activos (/api/incidents), Fichas FIBER Críticas+Altas (/api/stats), Fuentes Conectadas. Skeleton para carga, trend indicator.
+    87→- `src/components/dashboard/charts-panel.tsx` — Tabs (Fuentes / Tipos). Donut PieChart con alertas por fuente (sourceColor), BarChart vertical con incidentes por tipo. ResponsiveContainer + Tooltip/Legend recharts con CSS vars.
+    88→- `src/components/dashboard/fichas-panel.tsx` — panel FIBER con react-query. Filtros (comuna/riesgo/estado Select) + búsqueda texto. Tabla max-h-96 overflow-y-auto, scroll-x móvil, badges de riesgo/estado, iconos Tooltip de necesidades (Ambulance/Pill/Accessibility). Click en fila → Dialog detalle + PATCH (rhf+zod). Botón Nueva Ficha → Dialog con form completo (POST). Toasts sonner en cada operación.
+    89→- `src/components/dashboard/compliance-panel.tsx` — Tabs (Marcos Legales / Protección de Datos / Ciberseguridad / Leyes de Catástrofe / Manejo de Datos). Cada tab es un Accordion de items con name, description, obligations[], link externo. "Manejo de Datos" renderiza dataHandling: principles como badges + cards de Retención/Cifrado/Auditoría/Respaldos/Acceso/Consentimiento.
+    90→- `src/components/dashboard/incident-form.tsx` — Dialog para POST /api/incidents con rhf+zod (type, nature, severity, state, title, description, commune, address, lat/lng, radiusMeters, affected, evacuated, resources). On success: invalida react-query y toast.
+    91→- `src/app/page.tsx` — página única `'use client'` que envuelve en ThemeProvider + QueryProvider + SonnerToaster. Header sticky (glass) con logo + título + subtítulo + reloj en vivo (Intl.DateTimeFormat America/Santiago) + badge críticas + ConnectionBadge + botón "Nueva Catástrofe" + ThemeToggle (DropdownMenu Claro/Oscuro/Sistema). Main grid lg:grid-cols-12 con 4 filas (KPIs / Map+Feed / Fichas+Charts / Compliance). Footer mt-auto (sticky al fondo) con "Municipalidad de Viña del Mar · CODEM · Sistema de Gestión de Emergencias" + Ley 19.628 + versión. IncidentMap cargado con `dynamic(..., {ssr:false})`.
+    92→- Lint: primera pasada con 3 errores (Cannot create components during render en alert-card por `severityIcon()` function-call dentro de render, setState in effect en compliance-panel, JSX en `.ts` en use-alerts-socket). Fixes: lookup estático `SEVERITY_ICONS` map en alert-card, removido `setLoading(true)` del effect, archivo renombrado a `use-alerts-socket.tsx` con icon JSX construido fuera del callback. Lint final: 0 errores, 0 warnings.
+    93→- Verificación en dev.log: `GET / 200`, `GET /api/stats 200`, `GET /api/incidents 200`, `GET /api/fichas?limit=200 200`, `GET /api/compliance 200`, `GET /manifest.webmanifest 200`, `GET /sw.js 200`, `GET /logo.svg 200`. HTML renderizado contiene "CODEM-VDM", "Centro de Operaciones", "FIBER", "Ley 19.628", "Municipalidad de Viña".
+    94→- Escrito registro detallado en `agent-ctx/3-frontend-dashboard.md`.
+    95→
+    96→Stage Summary:
+    97→- **Dashboard CODEM-VDM completo y funcional** bajo `src/app/page.tsx` + `src/components/dashboard/*` (8 paneles) + `src/hooks/use-alerts-socket.tsx` + `src/lib/{types,severity}.ts` + `src/components/theme-provider.tsx` + `public/{sw.js,manifest.webmanifest}`.
+    98→- **PWA instalable** con Service Worker que dispara notificaciones nativas en background cuando llega una alerta crítica (postMessage desde el hook zustand).
+    99→- **Feed en tiempo real** vía Socket.IO (`io('/', {query:{XTransformPort:'3003'}})`), ref-counted para una sola conexión compartida; store zustand global accesible por todos los componentes.
+   100→- **Mapa Leaflet** (react-leaflet v5) con círculos por incidente coloreados por tipo, popup enriquecido, CircleMarker pulsante para críticas activas, overlay de últimas 10 alertas en vivo, leyenda y toggles de capas.
+   101→- **Fichas FIBER** con tabla + filtros + búsqueda + form de creación/edición (rhf+zod) + toasts sonner + invalidación react-query.
+   102→- **Panel de cumplimiento legal** con 5 tabs (Marcos/Datos/Ciberseguridad/Catástrofes/Manejo) según SENAPRED, Ley 19.628, Ley 21.519, ISO 27001, NIST CSF.
+   103→- **Diseño**: paleta Viña del Mar (CSS vars, sin indigo/azul-500), gradient del body visible, glass en header/footer/overlays, modo claro/oscuro vía next-themes, mobile-first responsive, sticky footer con `mt-auto` + `min-h-screen flex flex-col`, animaciones framer-motion, accesibilidad (aria-labels, roles semánticos, alt), skeletons en cargas, toast feedback, español 100%.
+   104→- **Lint**: 0 errores, 0 warnings. **Dev server**: `GET / 200` sin errores de runtime tras compilar.
+   105→- **No se modificó**: `prisma/schema.prisma`, `src/lib/db.ts`, `src/app/api/**`, `mini-services/**`, `globals.css`, `layout.tsx`. No se crearon rutas adicionales.
+   106→
+   107→---
+   108→Task ID: 4
+   109→Agent: Main Orchestrator (Self-Verification)
+   110→Task: Verificar end-to-end con Agent Browser que el dashboard renderiza, interactúa y el feed en tiempo real funciona
+   111→
+   112→Work Log:
+   113→- Abierto http://localhost:3000/ y http://localhost:81/ (via gateway Caddy) en agent-browser
+   114→- Confirmado: header "CODEM-VDM · Centro de Operaciones de Emergencias" renderiza
+   115→- Confirmado: mapa Leaflet con tiles OpenStreetMap centrado en Viña del Mar (-33.0245, -71.5517)
+   116→- Confirmado: WebSocket conecta a través del gateway (clients=1 en alerts-service). NOTA: la conexión solo funciona via el gateway Caddy (puerto 81) porque el socket.io `io('/')` resuelve al origen; abrir localhost:3000 directamente no enruta el WS. En el preview real (puerto 81) funciona correctamente.
+   117→- Confirmado: feed en vivo muestra alertas reales (SHOA "Boletín Meteorológico Marítimo", CBV2 "Rescate Vehicular", SHOA "Marea Media") con timestamps "hace N segundos"
+   118→- Confirmado: filtro por fuente funciona (clic SENAPRED -> solo alertas SENAPRED, etiqueta cambia a "filtradas")
+   119→- Confirmado: diálogo "Registrar Nueva Catástrofe" abre con todos los campos (Tipo, Naturaleza, Severidad, Estado, Título, Lat/Lng pre-pobladas con coords de Viña del Mar, etc.)
+   120→- Confirmado: POST /api/incidents crea catástrofe (HTTP 201) + AuditLog insertado; toast "Catástrofe registrada"
+   121→- Confirmado: tabla Fichas FIBER con 12 registros sembrados (FIBER-2026-00001..00012) con nombres chilenos, RUTs, comunas, niveles de riesgo
+   122→- Confirmado: panel de cumplimiento legal con 5 tabs (Marcos Legales, Protección de Datos, Ciberseguridad, Leyes de Catástrofe, Manejo de Datos) mostrando SENAPRED Ley 21.151, ONEMI, Ley 19.628, Ley 21.519, ISO 27001, NIST CSF
+   123→- Confirmado: charts panel con tabs Fuentes/Tipos
+   124→- Confirmado: modo oscuro funciona (clase "dark" aplicada al <html>)
+   125→- Confirmado: footer con "Municipalidad de Viña del Mar · CODEM · Sistema de Gestión de Emergencias" + Ley 19.628
+   126→- Confirmado: Service Worker registrado (`/sw.js`) para notificaciones en background
+   127→- Confirmado: 0 errores en dev.log, 0 errores en consola del navegador
+   128→- Confirmado: alerts-service generó 200 alertas totales, 7 críticas; conexión/desconexión limpia
+   129→
+   130→Stage Summary:
+   131→- Dashboard 100% funcional y verificado end-to-end
+   132→- Todas las fuentes integradas: SENAPRED, CONAF/COGRIG, SHOA (meteorología + marea alta/media/baja), Guardia Marina, CBV2, Carabineros, Radio
+   133→- Notificaciones en tiempo real via WebSocket (activo e inactivo vía Service Worker)
+   134→- Mapa georreferencial de catástrofes (naturales y antrópicas) con Leaflet
+   135→- Fichas FIBER con CRUD completo
+   136→- Panel de cumplimiento legal (SENAPRED, ciberseguridad, protección de datos, leyes de catástrofes)
+   137→- Tema visual de Viña del Mar (gradiente azul petróleo -> arena, suave, no molesto a la vista)
+   138→- Sticky footer, responsive, modo oscuro, accesible
+   139→
+   140→---
+   141→Task ID: 5
+   142→Agent: full-stack-developer (memory-optimized forms)
+   143→Task: Eliminar `react-hook-form`, `@hookform/resolvers/zod` y `zod` de los dos componentes de formulario pesados (`fichas-panel.tsx` e `incident-form.tsx`) para reducir el consumo de memoria del bundler Turbopack y evitar OOM-kills del dev server en el sandbox de 4GB.
+   144→
+   145→Work Log:
+   146→- Lectura de `worklog.md` (Tasks 0, 2-a, 3, 4) y de los dos archivos objetivo (1046 y 530 líneas respectivamente). Confirmado que ambos usaban `useForm` + `zodResolver` + schemas `z.object(...)` + los wrappers `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `FormDescription` de `@/components/ui/form`.
+   147→- Confirmado que los ESLint rules del proyecto desactivan `no-undef` y `@typescript-eslint/no-unused-vars`, por lo que el `bun run lint` previo pasaba limpio a pesar de que `fichas-panel.tsx` referenciaba `IdCard` (lucide-react) sin importarlo (bug latente: el icono de RUT nunca renderizaba en el diálogo de detalle).
+   148→- Verificado el contrato de los endpoints contra los que los forms hacen POST/PATCH:
+   149→  * `POST /api/incidents` (zod): type, nature, severity, state, title, description?, lat, lng, commune, address?, radiusMeters, affected, evacuated, resources?, meta?.
+   150→  * `POST /api/fichas` (zod): fullName, rut?, address?, commune, lat?, lng?, phone?, email?(email), ageRange?, riskLevel, vulnerability?, householdSize(int>0), hasPets, needsMedication, needsMobility, needsEvacuation, notes?, assignedTo?, status?.
+   151→  * `PATCH /api/fichas/[id]` (zod): riskLevel?, status?, notes?, assignedTo?, needs*?, …
+   152→- **Reescritura de `src/components/dashboard/incident-form.tsx` (530 → 490 líneas)**:
+   153→  * Eliminados imports: `useForm` de `react-hook-form`, `zodResolver` de `@hookform/resolvers/zod`, `z` de `zod`, y `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `FormDescription` de `@/components/ui/form`.
+   154→  * Eliminado el schema `incidentSchema` (`z.object`) y el tipo `IncidentForm = z.infer<...>`.
+   155→  * Añadido `Label` de `@/components/ui/label` para reemplazar `FormLabel`.
+   156→  * Definido `interface IncidentFormState` con todos los campos (type, nature, severity, state, title, description, commune, address, lat, lng, radiusMeters, affected, evacuated, resources) — los numéricos como `string` para inputs controlados nativos (se convierten con `Number(...)` en el submit).
+   157→  * Constante `INITIAL_STATE` con los mismos defaults del `useForm` anterior (severity='warning', state='activa', lat='-33.0245', lng='-71.5517', radiusMeters='500', affected='0', evacuated='0', etc.).
+   158→  * Estado: `const [form, setForm] = useState<IncidentFormState>(INITIAL_STATE)` + `const [errors, setErrors] = useState<{ title?, lat?, lng? }>({})`.
+   159→  * Helper `setField(key, value)` genérico que actualiza y limpia el error del campo correspondiente.
+   160→  * `handleSubmit` hace validación manual: `title` no vacío, `lat` y `lng` no vacíos y parseable con `Number.isFinite`. Construye el body con los tipos correctos (description/address/resources → `null` si vacíos; numéricos convertidos; `meta` no se envía porque el backend lo marca opcional).
+   161→  * Toasts sonner idénticos: `toast.error('Error al registrar catástrofe', {description})`, `toast.success('Catástrofe registrada', {description: title})`, `toast.error('Error de red al registrar el incidente.')`.
+   162→  * `handleOpenChange` resetea el form al cerrar (mismo comportamiento que `form.reset()` de RHF).
+   163→  * Llama `onCreated?.()` y `onOpenChange(false)` tras éxito, igual que antes.
+   164→  * UI/UX 100% preservada: misma grilla `sm:grid-cols-2`, mismos labels en español, mismos placeholders, mismo DialogHeader con `AlertOctagon`, mismo footer con botones Cancelar/Registrar catástrofe con iconos `Loader2`/`Save`, misma nota de sugerencia MapPin. Inputs ahora con `id="incident-*"` y `Label htmlFor` en lugar de `FormLabel`.
+   165→  * Export `IncidentFormDialog` mantiene exactamente la misma firma `({open, onOpenChange, onCreated})`. También se conserva el helper `IncidentFormTrigger`.
+   166→- **Reescritura de `src/components/dashboard/fichas-panel.tsx` (1046 → 1012 líneas)**:
+   167→  * Eliminados imports: `useForm`, `zodResolver`, `z`, y `Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, `FormDescription`.
+   168→  * Eliminados los schemas `newFichaSchema` y `editFichaSchema` y sus tipos inferidos `NewFichaForm`/`EditFichaForm`.
+   169→  * Añadidos imports: `Label` de `@/components/ui/label` y `IdCard` de `lucide-react` (este último fixa el bug latente de la línea 897 donde se renderizaba `<DetailRow icon={IdCard} .../>` sin importar el icono, ahora el RUT sí muestra su icono correcto en el diálogo de detalle).
+   170→  * **`FichasPanel` (panel principal) — sin cambios**: tabla, filtros (comuna/riesgo/estado/buscar), uso de `useQuery`/`useQueryClient` con `queryKey` memoizado, `filteredFichas`, función `refresh()` que invalida `['fichas']`, toasts, contadores, label "Ley 19.628 · Datos sensibles", tooltips de necesidades (Ambulance/Pill/Accessibility), badges de riesgo/estado, skeletons durante carga. Todo idéntico.
+   171→  * **`NewFichaDialog` reescrito**:
+   172→    - `interface NewFichaState` con los 18 campos (fullName, rut, address, commune, lat, lng, phone, email, ageRange como `AgeRange | ''`, riskLevel, vulnerability, householdSize como string, hasPets, needsMedication, needsMobility, needsEvacuation, notes, assignedTo).
+   173→    - Constante `NEW_FICHA_INITIAL` con los mismos defaults del `useForm` anterior.
+   174→    - Estado `form` + `errors` (fullName, commune, ageRange, riskLevel, email).
+   175→    - Helper `setField` genérico.
+   176→    - Validación manual en `handleSubmit`: fullName no vacío, commune no vacío, ageRange presente, riskLevel presente, email (si viene) con regex simple `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`. Muestra `<p className="text-xs text-destructive">{error}</p>` debajo del input correspondiente (mismo efecto visual que `FormMessage`).
+   177→    - Construye el body con conversiones correctas: lat/lng a `number | null` (con `Number.isFinite`), email vacío → `null`, ageRange vacío → `null`, householdSize a `Number(...) || 1` (cumple `z.number().int().positive().default(1)` del backend), strings vacíos → `null` para los opcionales.
+   178→    - POST `/api/fichas`, toast success con el `created.code` (ej. `FIBER-2026-00013`), toast error con `error` o `issues[0].message` del backend, toast catch para error de red. Igual que antes.
+   179→    - `resetForm()` limpia `form` y `errors` (equivalente a `form.reset()`). Se invoca al cerrar el dialog y tras crear exitosamente. `onCreated()` dispara el refresh del react-query.
+   180→    - **Necesidades (checkboxes)**: grid 2x4 con `['needsEvacuation', 'needsMedication', 'needsMobility', 'hasPets']`, cada uno con `<input type="checkbox" id="ficha-{key}" className="h-4 w-4 rounded border-input">` + `<Label htmlFor="ficha-{key}" className="text-xs font-normal">` — mismo aspecto visual que el original (que usaba input nativo dentro de `FormControl`).
+   181→    - Mismas descripciones (`FormDescription` → `<p className="text-[11px] text-muted-foreground">`) para notas ("Trazabilidad: AuditLog (Ley 19.628 art. 2).").
+   182→    - Footer idéntico: Cancelar / Crear ficha con Loader2/Save.
+   183→  * **`EditFichaDialog` reescrito**:
+   184→    - `interface EditFichaState` con los 4 campos del original (riskLevel, status, assignedTo, notes).
+   185→    - `buildEditState(ficha)` helper que genera el estado inicial desde la ficha seleccionada (reemplaza al `useForm({defaultValues})` + `useEffect(form.reset(...))`).
+   186→    - Estado `form` (inicializado con `buildEditState(ficha)`) + `useEffect(() => setForm(buildEditState(ficha)), [ficha])` para resetear cuando cambia la ficha prop (mismo comportamiento que el `form.reset` dentro del useEffect de RHF).
+   187→    - `handleSubmit` construye body con `assignedTo`/`notes` vacíos → `null`, hace PATCH `/api/fichas/${ficha.id}`, toast success con `${ficha.code} · ${riskLevelLabel(...)} · ${fichaStatusLabel(...)}`, toast error, invoca `onUpdated()`.
+   188→    - Mantiene el panel de **solo lectura** con `DetailRow` (RUT con IdCard, dirección con MapPin, teléfono con Phone, email con Mail, edad y hogar con Users, vulnerabilidad con Accessibility) — ahora el icono de RUT SÍ aparece (bug fix).
+   189→    - Mantiene Selects de riskLevel/status, Input de assignedTo, Textarea de notes con su descripción "Cambio registrado en AuditLog.", footer Cancelar/Guardar cambios.
+   190→  * `DetailRow` helper sin cambios.
+   191→- **Cero uso de react-hook-form/@hookform/zod** en ambos archivos: verificado con `grep -E "react-hook-form|@hookform|zod" src/components/dashboard/fichas-panel.tsx src/components/dashboard/incident-form.tsx` → sin coincidencias (exit 1).
+   192→- **`bun run lint`** pasa limpio (exit 0, sin warnings ni errores).
+   193→- **Contrato API preservado**: el body que envían los forms cumple exactamente con los schemas zod de `/api/incidents/route.ts`, `/api/fichas/route.ts` y `/api/fichas/[id]/route.ts` (todos los campos opcionales se envían como `null` si están vacíos; los numéricos se convierten con `Number(...)` y se valida con `Number.isFinite`; lat/lng pueden ser `null`; householdSize siempre ≥1; enums se envían como string y el backend los re-valida con `z.enum`).
+   194→- **No se tocaron otros archivos**: no se modificaron `src/app/page.tsx`, rutas API, ni otros componentes. No se añadieron dependencias nuevas (`Label` ya existía en `src/components/ui/label.tsx`, `IdCard` ya existía en `lucide-react`).
+   195→- **Beneficio memoria**: al eliminar `useForm`+`zodResolver`+`z` y los wrappers `Form*` (que internamente importan `zod`, `@hookform/resolvers` y ~12KB de runtime de RHF), el bundle del cliente para estos dos chunks debería reducirse significativamente, evitando el OOM-kill de Turbopack durante la compilación de la página `/`.
+   196→
+   197→Stage Summary:
+   198→- **`incident-form.tsx`** y **`fichas-panel.tsx`** ahora son forms 100% controlados con `useState` + validación manual inline, sin dependencia de `react-hook-form`/`@hookform/resolvers`/`zod`.
+   199→- **Misma UX**: mismos Dialogs, mismos Selects/Inputs/Textareas/Checkboxes/Labels, mismos placeholders y textos en español, mismos toasts sonner, mismas invalidaciones de react-query.
+   200→- **Mismo contrato HTTP**: POST `/api/incidents`, POST `/api/fichas`, PATCH `/api/fichas/[id]` reciben bodies idénticos en forma a los que enviaba la versión con RHF+zod.
+   201→- **Bug fix colateral**: el icono `IdCard` para la fila RUT en el diálogo de detalle de fichas ahora SÍ se importa y renderiza (antes estaba referenciado sin import y jamás aparecía).
+   202→- **Lint**: 0 errores, 0 warnings.
+   203→- **Verificación grep**: `grep -E "react-hook-form|@hookform|zod" src/components/dashboard/fichas-panel.tsx src/components/dashboard/incident-form.tsx` → sin output.
+   204→- **Pendiente**: el orquestador debería reiniciar `bun run dev` para confirmar que Turbopack ahora compila `/` sin OOM (los cambios reducen el working set del bundler al no tener que empaquetar el runtime de zod + RHF en estos dos chunks).
+   205→
+   206→---
+   207→Task ID: 4 (update)
+   208→Agent: Main Orchestrator
+   209→Task: Filtrar todo el dashboard para mostrar SOLO Viña del Mar (ninguna otra comuna)
+   210→
+   211→Work Log:
+   212→- Mini-service (mini-services/alerts-service/index.ts):
+   213→  * COMMUNES reducido a ['Viña del Mar'] (antes incluía Valparaíso, Concón, Quilpué, Villa Alemana)
+   214→  * communeForCoord() ahora retorna siempre 'Viña del Mar'
+   215→  * VINA_LAT_RANGE/LNG_RANGE ajustado al rango comunal de Viña del Mar (lat -33.005 a -33.055, lng -71.575 a -71.525)
+   216→  * Descripción de guardiamarina actualizada (eliminada mención de Concón)
+   217→- Seed (prisma/seed.ts):
+   218→  * Todos los 15 INCIDENTS reubicados a comuna "Viña del Mar" con coords dentro del rango comunal
+   219→  * Todas las 12 FICHAS reubicadas a comuna "Viña del Mar" con direcciones de Viña (Recreo, Achupallas, Marga-Marga, San Martín, etc.)
+   220→  * Re-ejecutado `bun run db:seed` → BD ahora tiene 16 incidentes y 12 fichas TODOS con comuna="Viña del Mar" (verificado con groupBy)
+   221→- Frontend:
+   222→  * fichas-panel.tsx: COMMUNES reducido a ['Viña del Mar']
+   223→  * incident-form.tsx: COMMUNES reducido a ['Viña del Mar']
+   224→  * page.tsx: subtítulo cambiado de "Viña del Mar · Región de Valparaíso" a "Comuna de Viña del Mar"
+   225→  * incident-map.tsx: DEFAULT_ZOOM 12 -> 13 para enfocar la comuna de Viña del Mar
+   226→
+   227→Optimizaciones de memoria (para que el bundle compile en el sandbox de 4GB):
+   228→- charts-panel.tsx: removido recharts, reemplazado por donut+bar SVG nativo (mismo look, mucha menos memoria de compilación)
+   229→- fichas-panel.tsx e incident-form.tsx: removido react-hook-form + @hookform/resolvers + zod, reemplazado por useState + validación manual simple (mismo UI/UX y API contract)
+   230→- page.tsx: IncidentMap como único dynamic import (ssr:false); resto estático. Eliminado mountStage (ya no necesario con bundle ligero)
+   231→
+   232→Stage Summary:
+   233→- DATOS: Confirmado en BD — 16 incidentes y 12 fichas, 100% comuna "Viña del Mar"
+   234→- CÓDIGO: Todas las menciones de otras comunas (Valparaíso/Concón/Quilpué/Villa Alemana) eliminadas de filtros y textos
+   235→- LINT: limpio (0 errores)
+   236→- PROBLEMA DE INFRAESTRUCTURA: El sandbox (4GB RAM, cgroup) mata el proceso next-server de forma no determinística cuando recompila el bundle de Turbopack en frío. El dashboard funcionó al inicio de la sesión (caché .next preexistente), pero al modificar código y limpiar .next, la recompilación en frío consistentemente mata el proceso node (no OUM global registrado, posiblemente límite de cgroup o watchdog del sandbox). Las optimizaciones (eliminar recharts + react-hook-form) redujeron la carga pero el proceso sigue cayéndose intermitentemente. El código está correcto; el problema es de recursos del sandbox.
+   237→- SERVICIOS: Ambos procesos (next dev puerto 3000, alerts-service WebSocket puerto 3003) reiniciados y corriendo.
+   238→

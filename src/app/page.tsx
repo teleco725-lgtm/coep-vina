@@ -1,12 +1,13 @@
 'use client';
 
 // ============================================================================
-// CODEM-VDM · Centro de Operaciones de Emergencias · Viña del Mar
+// Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360
 // Página principal del dashboard (única ruta visible: /)
 // ----------------------------------------------------------------------------
 // Compone todos los paneles del dashboard: KPIs, mapa, feed en vivo, fichas
-// FIBER, gráficos y panel de cumplimiento legal. Header sticky con reloj,
-// estado de conexión y modo oscuro. Footer sticky al fondo (mt-auto).
+// FIBER, gráficos, mareas y panel de cumplimiento legal. Header sticky con
+// reloj, estado de conexión, campana de notificaciones, exportar y modo
+// oscuro. Footer sticky al fondo (mt-auto).
 // ============================================================================
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -20,16 +21,23 @@ import {
 import { useTheme } from 'next-themes';
 import {
   Activity,
-  AlertTriangle,
+  Bell,
   Calendar,
   Clock,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Loader2,
   Moon,
   Plus,
   RadioTower,
+  Presentation,
   Sun,
   Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatDistanceToNow } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster as SonnerToaster } from '@/components/ui/sonner';
@@ -40,7 +48,15 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { StatsOverview } from '@/components/dashboard/stats-overview';
 import { LiveFeed } from '@/components/dashboard/live-feed';
@@ -49,8 +65,14 @@ import { FichasPanel } from '@/components/dashboard/fichas-panel';
 import { CompliancePanel } from '@/components/dashboard/compliance-panel';
 import { IncidentFormDialog } from '@/components/dashboard/incident-form';
 
-import { useAlertsSocket } from '@/hooks/use-alerts-socket';
+import { useAlertsSocket, useRecentNotifications, useUnreadCount, useMarkAllRead } from '@/hooks/use-alerts-socket';
 import type { Incident } from '@/lib/types';
+import {
+  severityColor,
+  severityLabel,
+  sourceShortLabel,
+  sourceColor,
+} from '@/lib/severity';
 
 // Leaflet/react-leaflet requieren `window`, por lo que el mapa se carga
 // como chunk dinamico (ssr:false). El resto de paneles son estaticos:
@@ -189,6 +211,239 @@ function ConnectionBadge() {
 }
 
 // ---------------------------------------------------------------------------
+// Notifications bell — consolidates recent alerts into a popover instead of
+// occupying screen space with toasts. Unread counter resets on open.
+// ---------------------------------------------------------------------------
+function NotificationsBell() {
+  const [open, setOpen] = useState(false);
+  const recent = useRecentNotifications(30);
+  const unread = useUnreadCount();
+  const markAllRead = useMarkAllRead();
+
+  // When the popover opens, mark all notifications as read so the badge
+  // resets visually while the operator reviews the list.
+  useEffect(() => {
+    if (open) markAllRead();
+  }, [open, markAllRead]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative h-9 w-9"
+          aria-label={`Notificaciones${unread > 0 ? `, ${unread} sin leer` : ''}`}
+        >
+          <Bell className="h-4 w-4" />
+          {unread > 0 && (
+            <span
+              className="absolute -top-0.5 -right-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold leading-none text-destructive-foreground"
+              aria-hidden
+            >
+              {unread > 99 ? '99+' : unread}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-[360px] max-w-[calc(100vw-2rem)] p-0"
+      >
+        <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Bell className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold">Notificaciones</span>
+            {unread > 0 && (
+              <Badge
+                variant="destructive"
+                className="h-5 px-1.5 text-[10px]"
+              >
+                {unread} nueva{unread === 1 ? '' : 's'}
+              </Badge>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={markAllRead}
+            disabled={unread === 0}
+            aria-label="Marcar todas las notificaciones como leídas"
+          >
+            Marcar todas leídas
+          </Button>
+        </div>
+        <ScrollArea className="max-h-[24rem]">
+          {recent.length === 0 ? (
+            <p className="px-3 py-8 text-center text-xs text-muted-foreground">
+              No hay notificaciones recientes. Las alertas que emitan las
+              fuentes oficiales aparecerán aquí en tiempo real.
+            </p>
+          ) : (
+            <ul className="divide-y">
+              {recent.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex gap-2 px-3 py-2.5 transition-colors hover:bg-accent/40"
+                >
+                  <span
+                    className={`mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${severityColor(
+                      a.severity,
+                    )}`}
+                    aria-label={`Severidad ${severityLabel(a.severity)}`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="mb-0.5 flex items-center justify-between gap-2">
+                      <span
+                        className="inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium"
+                        style={{
+                          backgroundColor: sourceColor(a.sourceCode),
+                          color: 'white',
+                        }}
+                      >
+                        {sourceShortLabel(a.sourceCode)}
+                      </span>
+                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                        {formatDistanceToNow(new Date(a.issuedAt), {
+                          addSuffix: true,
+                          locale: es,
+                        })}
+                      </span>
+                    </div>
+                    <p className="line-clamp-2 text-xs font-medium text-foreground">
+                      {a.title}
+                    </p>
+                    {a.commune && (
+                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                        {a.commune}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Export menu — triggers /api/export/{excel,word,pdf,pptx}
+// ---------------------------------------------------------------------------
+type ExportFormat = 'excel' | 'word' | 'pdf' | 'pptx';
+
+function ExportMenu() {
+  const [exporting, setExporting] = useState<ExportFormat | null>(null);
+
+  async function handleExport(format: ExportFormat) {
+    if (exporting) return;
+    try {
+      setExporting(format);
+      const friendly: Record<ExportFormat, string> = {
+        excel: 'Excel',
+        word: 'Word',
+        pdf: 'PDF',
+        pptx: 'PowerPoint',
+      };
+      toast.loading(`Generando documento ${friendly[format]}…`, {
+        id: 'export',
+      });
+
+      if (format === 'excel') {
+        // Excel is a GET that streams the file directly.
+        window.open('/api/export/excel', '_blank');
+        toast.success(`Documento ${friendly[format]} generado`, {
+          id: 'export',
+        });
+        return;
+      }
+
+      const res = await fetch(`/api/export/${format}`, { method: 'POST' });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = format === 'word' ? 'docx' : format === 'pptx' ? 'pptx' : 'pdf';
+      a.download = `informe-emergencias-vina-del-mar.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Documento ${friendly[format]} generado`, {
+        id: 'export',
+      });
+    } catch (err) {
+      console.error('[export] error:', err);
+      toast.error('No se pudo generar el documento. Intente nuevamente.', {
+        id: 'export',
+      });
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label="Exportar datos del dashboard"
+          disabled={exporting !== null}
+        >
+          {exporting ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Download className="h-3.5 w-3.5" />
+          )}
+          <span className="hidden sm:inline">
+            {exporting ? 'Generando…' : 'Exportar'}
+          </span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Descargar informe</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => void handleExport('excel')}
+          className="gap-2"
+        >
+          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+          Excel (.xlsx)
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => void handleExport('word')}
+          className="gap-2"
+        >
+          <FileText className="h-4 w-4 text-sky-600" />
+          Word (.docx)
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => void handleExport('pdf')}
+          className="gap-2"
+        >
+          <FileText className="h-4 w-4 text-rose-600" />
+          PDF (.pdf)
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => void handleExport('pptx')}
+          className="gap-2"
+        >
+          <Presentation className="h-4 w-4 text-amber-600" />
+          PowerPoint (.pptx)
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main dashboard
 // ---------------------------------------------------------------------------
 function Dashboard() {
@@ -239,15 +494,6 @@ function Dashboard() {
   const refreshIncidents = () =>
     void queryClient.invalidateQueries({ queryKey: ['incidents'] });
 
-  // Critical count badge in header
-  const criticalCount = useMemo(
-    () =>
-      alerts.filter(
-        (a) => a.severity === 'critical' && a.state === 'activa',
-      ).length,
-    [alerts],
-  );
-
   return (
     <div className="flex min-h-screen flex-col">
       {/* ===== Header (sticky) ===== */}
@@ -260,15 +506,15 @@ function Dashboard() {
           <div className="flex items-center gap-3">
             <img
               src="/logo.svg"
-              alt="Escudo institucional CODEM-VDM"
+              alt="Escudo institucional Comando de Emergencia Regional"
               className="h-10 w-10 shrink-0"
             />
             <div className="flex flex-col leading-tight">
               <h1 className="text-sm font-bold text-foreground sm:text-base">
-                CODEM-VDM · Centro de Operaciones de Emergencias
+                Comando de Emergencia Regional
               </h1>
               <p className="text-[11px] text-muted-foreground">
-                Comuna de Viña del Mar
+                VeltrixIntegra · Ecosistema Digital 360 · Viña del Mar
               </p>
             </div>
           </div>
@@ -280,17 +526,6 @@ function Dashboard() {
               <span className="tabular-nums">WS 3003</span>
             </div>
 
-            {criticalCount > 0 && (
-              <Badge
-                variant="destructive"
-                className="gap-1"
-                aria-label={`${criticalCount} alertas críticas activas`}
-              >
-                <AlertTriangle className="h-3 w-3" />
-                {criticalCount} crítica{criticalCount === 1 ? '' : 's'}
-              </Badge>
-            )}
-
             <ConnectionBadge />
 
             <div className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
@@ -299,6 +534,10 @@ function Dashboard() {
             </div>
 
             <LiveClock />
+
+            <NotificationsBell />
+
+            <ExportMenu />
 
             <Button
               type="button"
@@ -384,8 +623,8 @@ function Dashboard() {
           <div className="flex items-center gap-2">
             <Shield className="h-3.5 w-3.5" />
             <span>
-              Municipalidad de Viña del Mar · CODEM · Sistema de Gestión de
-              Emergencias
+              Comando de Emergencia Regional · VeltrixIntegra Ecosistema
+              Digital 360
             </span>
           </div>
           <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-3">
@@ -394,7 +633,7 @@ function Dashboard() {
               <strong className="font-medium text-foreground">Ley 19.628</strong>
             </span>
             <span className="hidden sm:inline">·</span>
-            <span className="tabular-nums">v1.0.0 · {new Date().getFullYear()}</span>
+            <span className="tabular-nums">v1.1.0 · {new Date().getFullYear()}</span>
           </div>
         </div>
       </footer>
