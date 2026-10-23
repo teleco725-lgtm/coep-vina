@@ -189,7 +189,11 @@ function makeExternalId(prefix: string): string {
 // ============================================================================
 // History buffer (in-memory)
 // ============================================================================
-const HISTORY_MAX = 200
+// Limite del historial en memoria. Antes era 200 (acumulaba cientos de
+// alertas falsas con el tiempo). Ahora 50: suficiente para ver lo reciente
+// sin llenar el dashboard de ruido. El pipeline TTL del cliente filtra
+// las que exceden el umbral temporal (4h emergencias, 12h boletines).
+const HISTORY_MAX = 50
 const history: BroadcastAlert[] = []
 
 function pushAlert(alert: BroadcastAlert): void {
@@ -754,7 +758,7 @@ const io = new Server(httpServer, {
 io.on('connection', (socket) => {
   console.log(`[alerts-service] client connected: ${socket.id}`)
   // On connect, send the last 20 alerts so a fresh page load has data.
-  socket.emit('history', getRecentAlerts(20))
+  socket.emit('history', getRecentAlerts(10))
 
   // Send immediate stats snapshot to the new client as well.
   socket.emit('stats', computeStats(io.engine.clientsCount))
@@ -762,7 +766,7 @@ io.on('connection', (socket) => {
   // Permite al cliente re-pedir el historial cuando el ClientOnly monta tarde
   // (después de que el evento 'history' inicial ya se envió).
   socket.on('requestHistory', () => {
-    socket.emit('history', getRecentAlerts(20))
+    socket.emit('history', getRecentAlerts(10))
     socket.emit('stats', computeStats(io.engine.clientsCount))
   })
 
@@ -792,10 +796,23 @@ function emitAlert(alert: BroadcastAlert): void {
 let alertTimer: ReturnType<typeof setTimeout> | null = null
 let statsTimer: ReturnType<typeof setInterval> | null = null
 
+// Limite del historial en memoria. Antes era 200, lo que acumulaba cientos
+// de alertas falsas con el tiempo. Ahora 50: suficiente para ver lo reciente
+// sin llenar el dashboard de ruido.
+const HISTORY_MAX_REALIST = 50
+
 function scheduleNextAlert(): void {
-  const delayMs = rand(8000, 20000) // 8-20s random
+  // FRECUENCIA REALISTA: una alerta cada 2 a 8 minutos (no cada 8-20 segundos).
+  // En la realidad, SENAPRED emite 2-5 alertas por dia, SHOA ocasionalmente,
+  // CBV2 5-15 llamados por dia, Carabineros algunos comunicados, Chilquinta
+  // cortes ocasionales. NO se emiten cientos de alertas por hora.
+  // 2-8 minutos = 120000 a 480000 ms. Para demo, aceleramos un poco: 60-240s.
+  const delayMs = rand(60000, 240000) // 1 a 4 minutos
   alertTimer = setTimeout(() => {
-    emitAlert(generateAlert())
+    // Solo emitir si el buffer no esta lleno (evita acumular falsos)
+    if (history.length < HISTORY_MAX_REALIST) {
+      emitAlert(generateAlert())
+    }
     scheduleNextAlert()
   }, delayMs)
 }
@@ -835,8 +852,9 @@ httpServer.listen(PORT, () => {
   )
   console.log('============================================================')
 
-  // Seed some initial history so a freshly-loaded page immediately has data.
-  for (let i = 0; i < 20; i++) {
+  // Seed: solo 5 alertas iniciales (antes eran 20, que llenaba el dashboard
+  // de ruido). Con 5 es suficiente para que la pagina arranque con datos.
+  for (let i = 0; i < 5; i++) {
     pushAlert(generateAlert())
   }
 

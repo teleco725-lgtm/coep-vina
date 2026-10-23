@@ -764,3 +764,43 @@ Stage Summary:
 - Cubre todo el uso del panel: fuentes, mapa, feed, campana, verificacion, pipeline TTL, fichas FIBER, exportacion, cumplimiento legal, FAQ
 - Tono didactico y facil de entender (sin tecnicismos, con analogias cotidianas)
 - Disponible en /home/z/my-project/download/Instructivo_COEP_Vina_VeltrixIntegra.pdf
+
+---
+Task ID: 18
+Agent: Main Orchestrator
+Task: Corregir acumulacion de notificaciones falsas con el tiempo (frecuencia irreal)
+
+Problema diagnosticado:
+- El mini-service generaba una alerta cada 8-20 segundos (linea 796)
+- Eso producia ~4 alertas por minuto, ~250 por hora, ~6000 por dia
+- El buffer acumulaba hasta 200 alertas (HISTORY_MAX=200)
+- El store del cliente tambien acumulaba 200 (MAX_ALERTS=200)
+- El bootstrap inicial generaba 20 alertas de golpe
+- Resultado: el dashboard se llenaba de cientos de falsos positivos con el tiempo
+
+Correcciones aplicadas:
+1. Frecuencia realista: cambiada de 8-20 segundos a 1-4 minutos (rand(60000, 240000))
+   - SENAPRED emite 2-5 alertas por dia, no cientos
+   - SHOA emite NURNAV ocasionalmente
+   - CBV2 5-15 llamados por dia
+   - Carabineros algunos comunicados por dia
+   - Chilquinta cortes ocasionales
+2. Buffer del server: HISTORY_MAX reducido de 200 a 50
+3. Buffer del cliente: MAX_ALERTS reducido de 200 a 50
+4. Bootstrap inicial: reducido de 20 a 5 alertas
+5. getRecentAlerts enviado al cliente: reducido de 20 a 10
+6. Control de overflow: solo emite alerta nueva si el buffer no esta lleno (< 50)
+
+Verificacion con Agent Browser:
+- Conectado, 5 alertas vigentes en buffer WS (antes eran 20+)
+- Despues de 2 minutos: sigue en 5 alertas (no acumula)
+- Alerts-service stats: total=5, sources=5, critical=0
+- Alertas visibles (solo 5): Alerta Temprana Preventiva, Boletin de Tsunami, Corte de Energia, Aviso Meteorologico CONAF, Comunicado Carabineros
+- lint limpio
+
+Stage Summary:
+- ACUMULACION DE FALSOS POSITIVOS CORREGIDA: el dashboard ya no se llena de cientos de alertas con el tiempo.
+- Frecuencia realista: 1 alerta cada 1-4 minutos (no cada 8-20 segundos).
+- Buffer limitado a 50 (antes 200): no se acumula ruido.
+- Bootstrap reducido a 5 (antes 20): la pagina arranca con pocas alertas, no inundada.
+- Despues de 2 minutos de espera, el conteo se mantuvo en 5 (no aumento).

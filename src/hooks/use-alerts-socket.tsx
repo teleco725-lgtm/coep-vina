@@ -47,7 +47,10 @@ interface AlertsStore {
   reset: () => void;
 }
 
-const MAX_ALERTS = 200;
+// Limite del store: 50 alertas (antes 200, acumulaba ruido con el tiempo).
+// El pipeline TTL del cliente filtra las que exceden el umbral temporal,
+// asi que 50 es suficiente para ver las vigentes sin llenar de falsos.
+const MAX_ALERTS = 50;
 
 const useAlertsStore = create<AlertsStore>((set) => ({
   alerts: [],
