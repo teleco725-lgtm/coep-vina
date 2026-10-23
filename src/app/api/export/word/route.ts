@@ -174,7 +174,7 @@ function coverPage(data: ExportData): Paragraph[] {
       alignment: AlignmentType.CENTER,
       children: [
         new TextRun({
-          text: 'Comando de Emergencia Regional',
+          text: 'COEP Viña · Centro de Operaciones de Emergencia Provincial',
           size: 24,
           color: ACCENT_COLOR,
           bold: true,
@@ -243,7 +243,7 @@ function buildDocument(data: ExportData): Document {
   const alertsSection = [
     heading('2. Alertas Activas', HeadingLevel.HEADING_1),
     paragraph(
-      'Las siguientes son las alertas más recientes emitidas por las fuentes oficiales integradas al Comando de Emergencia Regional. La severidad se interpreta como: Vigilancia (monitoreo), Alerta (acción recomendada) y Crítica (acción inmediata).',
+      'Las siguientes son las alertas más recientes emitidas por las fuentes oficiales integradas al COEP Viña · Centro de Operaciones de Emergencia Provincial. La severidad se interpreta como: Vigilancia (monitoreo), Alerta (acción recomendada) y Crítica (acción inmediata).',
     ),
     tableFromRows(alertsHeader, alertsRows.length > 0 ? alertsRows : [['Sin alertas recientes', '', '', '', '']]),
   ];
@@ -345,7 +345,7 @@ function buildDocument(data: ExportData): Document {
   const complianceSection = [
     heading('5. Cumplimiento Legal y Ciberseguridad', HeadingLevel.HEADING_1),
     paragraph(
-      'El Comando de Emergencia Regional opera bajo el marco normativo chileno. Las leyes y estándares aplicables son los siguientes:',
+      'El COEP Viña · Centro de Operaciones de Emergencia Provincial opera bajo el marco normativo chileno. Las leyes y estándares aplicables son los siguientes:',
     ),
     heading('SENAPRED — Ley 21.151', HeadingLevel.HEADING_2),
     paragraph(
@@ -381,10 +381,10 @@ function buildDocument(data: ExportData): Document {
 
   // Build the full document with cover + body + footer.
   return new Document({
-    creator: 'Comando de Emergencia Regional',
+    creator: 'COEP Viña · Centro de Operaciones de Emergencia Provincial',
     title: 'Informe de Emergencias — Viña del Mar',
     description:
-      'Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360',
+      'COEP Viña · Centro de Operaciones de Emergencia Provincial · VeltrixIntegra Ecosistema Digital 360',
     styles: {
       default: {
         document: {
@@ -407,7 +407,7 @@ function buildDocument(data: ExportData): Document {
                 children: [
                   new TextRun({
                     text:
-                      'Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360 · Confidencial · Página ',
+                      'COEP Viña · Centro de Operaciones de Emergencia Provincial · VeltrixIntegra Ecosistema Digital 360 · Confidencial · Página ',
                     size: 18,
                     color: '6B7280',
                   }),

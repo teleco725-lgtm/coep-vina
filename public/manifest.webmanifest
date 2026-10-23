@@ -1,7 +1,7 @@
 {
-  "name": "Comando de Emergencia Regional",
-  "short_name": "Comando Regional",
-  "description": "Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360 · Viña del Mar, Región de Valparaíso. Plataforma integral de gestión de emergencias que integra SENAPRED, CONAF, SHOA, Bomberos CBV2, Carabineros y Radio.",
+  "name": "COEP Viña · Centro de Operaciones de Emergencia Provincial",
+  "short_name": "COEP Viña",
+  "description": "COEP Viña (Centro de Operaciones de Emergencia Provincial de Viña del Mar) · VeltrixIntegra Ecosistema Digital 360 · Región de Valparaíso. Plataforma integral de gestión de emergencias que integra SENAPRED, CONAF, SHOA, Bomberos CBV2, Carabineros y Radio.",
   "lang": "es-CL",
   "dir": "ltr",
   "start_url": "/",

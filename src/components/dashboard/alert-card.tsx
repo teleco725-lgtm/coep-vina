@@ -13,6 +13,8 @@ import {
   Eye,
   AlertTriangle,
   Siren,
+  BadgeCheck,
+  ShieldAlert,
 } from 'lucide-react';
 
 import {
@@ -120,7 +122,7 @@ export function AlertCard({ alert, index = 0 }: AlertCardProps) {
         aria-label={`Alerta ${severityLabel(alert.severity)}: ${alert.title}`}
       >
         <CardContent className="flex flex-col gap-2 p-3 sm:p-4">
-          {/* Header row: severity icon + source badge + time */}
+          {/* Header row: severity icon + source badge + verified badge + time */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span
@@ -146,6 +148,43 @@ export function AlertCard({ alert, index = 0 }: AlertCardProps) {
                 </TooltipTrigger>
                 <TooltipContent>{alert.sourceName}</TooltipContent>
               </Tooltip>
+              {/* Badge de verificación: VERIFICADA (verdadera) vs RUMOR (no
+                  confirmada). Las alertas sin el campo `verified` se asumen
+                  verificadas por retrocompatibilidad. */}
+              {alert.verified === false ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-amber-400/50 px-1.5 py-0 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                    >
+                      <ShieldAlert className="h-3 w-3" />
+                      Rumor
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[16rem] text-xs">
+                    Reporte no confirmado por una fuente oficial. Mostrar con
+                    precaución — puede ser información no verificada.
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className="gap-1 border-emerald-400/50 px-1.5 py-0 text-[10px] font-medium text-emerald-700 dark:text-emerald-400"
+                    >
+                      <BadgeCheck className="h-3 w-3" />
+                      Verificada
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[16rem] text-xs">
+                    Alerta emitida por una fuente oficial con canal de
+                    difusión verificado (SENAPRED, CONAF, SHOA, Bomberos,
+                    Carabineros o Guardia Marina).
+                  </TooltipContent>
+                </Tooltip>
+              )}
               <Badge variant="outline" className="text-xs">
                 {categoryLabel(alert.category)}
               </Badge>

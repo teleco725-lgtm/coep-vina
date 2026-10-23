@@ -194,7 +194,7 @@ function drawCoverPage(doc: PDFKit.PDFDocument, data: ExportData, pageWidth: num
 
   // Brand block
   doc.fillColor(ACCENT).fontSize(15).font('Helvetica-Bold');
-  doc.text('Comando de Emergencia Regional', 0, pageHeight * 0.28 + 100, {
+  doc.text('COEP Viña · Centro de Operaciones de Emergencia Provincial', 0, pageHeight * 0.28 + 100, {
     width: pageWidth,
     align: 'center',
   });
@@ -225,7 +225,7 @@ function drawFooter(doc: PDFKit.PDFDocument, pageNum: number, totalPages: number
   doc.rect(0, pageHeight - 28, pageWidth, 1).fill('#E5E7EB');
   doc.fillColor(MUTED).fontSize(8).font('Helvetica');
   doc.text(
-    'Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360 · Confidencial',
+    'COEP Viña · Centro de Operaciones de Emergencia Provincial · VeltrixIntegra Ecosistema Digital 360 · Confidencial',
     40,
     pageHeight - 22,
     { width: pageWidth / 2 - 40, align: 'left' },
@@ -273,8 +273,8 @@ async function renderPdf(data: ExportData): Promise<Buffer> {
         margins: { top: 60, bottom: 60, left: 50, right: 50 },
         info: {
           Title: 'Informe de Emergencias — Viña del Mar',
-          Author: 'Comando de Emergencia Regional',
-          Subject: 'Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360',
+          Author: 'COEP Viña · Centro de Operaciones de Emergencia Provincial',
+          Subject: 'COEP Viña · Centro de Operaciones de Emergencia Provincial · VeltrixIntegra Ecosistema Digital 360',
         },
       });
       const chunks: Buffer[] = [];
@@ -303,7 +303,7 @@ async function renderPdf(data: ExportData): Promise<Buffer> {
       y = drawHeading(doc, '2. Alertas Activas', 1, y, margin, pageWidth, pageHeight);
       y = drawParagraph(
         doc,
-        'Las siguientes son las alertas más recientes emitidas por las fuentes oficiales integradas al Comando de Emergencia Regional. La severidad se interpreta como: Vigilancia (monitoreo), Alerta (acción recomendada) y Crítica (acción inmediata).',
+        'Las siguientes son las alertas más recientes emitidas por las fuentes oficiales integradas al COEP Viña · Centro de Operaciones de Emergencia Provincial. La severidad se interpreta como: Vigilancia (monitoreo), Alerta (acción recomendada) y Crítica (acción inmediata).',
         y,
         margin,
         pageWidth,
@@ -418,7 +418,7 @@ async function renderPdf(data: ExportData): Promise<Buffer> {
       y = drawHeading(doc, '5. Cumplimiento Legal y Ciberseguridad', 1, y, margin, pageWidth, pageHeight);
       y = drawParagraph(
         doc,
-        'El Comando de Emergencia Regional opera bajo el marco normativo chileno. Las leyes y estándares aplicables son los siguientes:',
+        'El COEP Viña · Centro de Operaciones de Emergencia Provincial opera bajo el marco normativo chileno. Las leyes y estándares aplicables son los siguientes:',
         y,
         margin,
         pageWidth,

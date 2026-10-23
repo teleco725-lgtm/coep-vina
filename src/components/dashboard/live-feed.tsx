@@ -2,11 +2,14 @@
 
 import { useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { Radio, WifiOff, Loader2, Inbox } from 'lucide-react';
+import { Radio, WifiOff, Loader2, Inbox, BadgeCheck, ShieldAlert } from 'lucide-react';
 
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 import { useAlertsSocket } from '@/hooks/use-alerts-socket';
 import { AlertCard } from '@/components/dashboard/alert-card';
@@ -28,11 +31,27 @@ const FILTERS: { code: FilterCode; label: string }[] = [
 export function LiveFeed() {
   const { alerts, status } = useAlertsSocket();
   const [filter, setFilter] = useState<FilterCode>('all');
+  // Por defecto: mostrar SOLO alertas verificadas (verdaderas).
+  // El operador puede apagar el switch para ver también los rumores
+  // (alertas no verificadas, típicamente de radio ciudadana).
+  const [onlyVerified, setOnlyVerified] = useState(true);
 
   const filtered = useMemo(() => {
-    if (filter === 'all') return alerts;
-    return alerts.filter((a) => a.sourceCode === filter);
-  }, [alerts, filter]);
+    let out = alerts;
+    if (onlyVerified) {
+      out = out.filter((a) => a.verified !== false);
+    }
+    if (filter !== 'all') {
+      out = out.filter((a) => a.sourceCode === filter);
+    }
+    return out;
+  }, [alerts, filter, onlyVerified]);
+
+  // Conteo de rumores ocultos (para feedback al operador).
+  const rumorCount = useMemo(
+    () => alerts.filter((a) => a.verified === false).length,
+    [alerts],
+  );
 
   const statusInfo = (() => {
     switch (status) {
@@ -90,7 +109,7 @@ export function LiveFeed() {
             <span className="text-muted-foreground">·</span>
             <span className="tabular-nums">{filtered.length}</span>
             <span className="text-muted-foreground">
-              {filter === 'all' ? ' alertas' : ' filtradas'}
+              {filter === 'all' && onlyVerified ? ' verificadas' : ' alertas'}
             </span>
           </div>
         </div>
@@ -99,7 +118,7 @@ export function LiveFeed() {
         </Badge>
       </CardHeader>
 
-      {/* Filters */}
+      {/* Filtros por fuente */}
       <div className="flex flex-wrap gap-1.5 border-b bg-muted/30 px-3 py-2">
         {FILTERS.map((f) => {
           const active = filter === f.code;
@@ -128,7 +147,52 @@ export function LiveFeed() {
         })}
       </div>
 
-      {/* List */}
+      {/* Toggle: Solo verificadas (verdaderas) vs Ver todas (incl. rumores) */}
+      <div className="flex items-center justify-between gap-2 border-b bg-muted/20 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <Switch
+            id="only-verified"
+            checked={onlyVerified}
+            onCheckedChange={setOnlyVerified}
+            aria-label="Mostrar solo alertas verificadas"
+          />
+          <Label
+            htmlFor="only-verified"
+            className="flex cursor-pointer items-center gap-1.5 text-xs font-medium"
+          >
+            {onlyVerified ? (
+              <>
+                <BadgeCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                Solo verificadas (verdaderas)
+              </>
+            ) : (
+              <>
+                <ShieldAlert className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                Todas (incl. rumores)
+              </>
+            )}
+          </Label>
+        </div>
+        {!onlyVerified && rumorCount > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="outline"
+                className="gap-1 border-amber-400/50 text-amber-700 dark:text-amber-400"
+              >
+                <ShieldAlert className="h-3 w-3" />
+                {rumorCount} rumor{rumorCount === 1 ? '' : 'es'}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[16rem] text-xs">
+              Reportes ciudadanos / radioperiodismo no confirmados por una
+              fuente oficial. Se muestran solo como referencia.
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+
+      {/* Lista de alertas */}
       <CardContent className="max-h-[28rem] overflow-y-auto p-3">
         {filtered.length === 0 ? (
           <div
@@ -138,7 +202,9 @@ export function LiveFeed() {
             <Inbox className="h-8 w-8 text-muted-foreground/60" />
             <p className="text-sm text-muted-foreground">
               {status === 'connected'
-                ? 'No hay alertas para este filtro.'
+                ? onlyVerified
+                  ? 'No hay alertas verificadas en este momento.'
+                  : 'No hay alertas para este filtro.'
                 : 'Esperando conexión con el feed en tiempo real…'}
             </p>
           </div>

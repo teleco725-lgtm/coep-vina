@@ -1,7 +1,7 @@
 'use client';
 
 // ============================================================================
-// Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360
+// COEP Viña · Centro de Operaciones de Emergencia Provincial · VeltrixIntegra Ecosistema Digital 360
 // Página principal del dashboard (única ruta visible: /)
 // ----------------------------------------------------------------------------
 // Compone todos los paneles del dashboard: KPIs, mapa, feed en vivo, fichas
@@ -220,6 +220,14 @@ function NotificationsBell() {
   const unread = useUnreadCount();
   const markAllRead = useMarkAllRead();
 
+  // La campana muestra SOLO alertas verificadas (verdaderas). Los rumores
+  // (verified=false) no aparecen aquí para evitar distraer al operador con
+  // reportes no confirmados — pueden revisarse en el feed en vivo.
+  const verifiedRecent = useMemo(
+    () => recent.filter((a) => a.verified !== false),
+    [recent],
+  );
+
   // When the popover opens, mark all notifications as read so the badge
   // resets visually while the operator reviews the list.
   useEffect(() => {
@@ -275,14 +283,14 @@ function NotificationsBell() {
           </Button>
         </div>
         <ScrollArea className="max-h-[24rem]">
-          {recent.length === 0 ? (
+          {verifiedRecent.length === 0 ? (
             <p className="px-3 py-8 text-center text-xs text-muted-foreground">
-              No hay notificaciones recientes. Las alertas que emitan las
-              fuentes oficiales aparecerán aquí en tiempo real.
+              No hay notificaciones verificadas recientes. Las alertas que
+              emitan las fuentes oficiales aparecerán aquí en tiempo real.
             </p>
           ) : (
             <ul className="divide-y">
-              {recent.map((a) => (
+              {verifiedRecent.map((a) => (
                 <li
                   key={a.id}
                   className="flex gap-2 px-3 py-2.5 transition-colors hover:bg-accent/40"
@@ -506,15 +514,15 @@ function Dashboard() {
           <div className="flex items-center gap-3">
             <img
               src="/logo.svg"
-              alt="Escudo institucional Comando de Emergencia Regional"
+              alt="Escudo institucional COEP Viña"
               className="h-10 w-10 shrink-0"
             />
             <div className="flex flex-col leading-tight">
               <h1 className="text-sm font-bold text-foreground sm:text-base">
-                Comando de Emergencia Regional
+                COEP Viña · Centro de Operaciones de Emergencia Provincial
               </h1>
               <p className="text-[11px] text-muted-foreground">
-                VeltrixIntegra · Ecosistema Digital 360 · Viña del Mar
+                VeltrixIntegra · Ecosistema Digital 360 · Comuna de Viña del Mar
               </p>
             </div>
           </div>
@@ -623,8 +631,8 @@ function Dashboard() {
           <div className="flex items-center gap-2">
             <Shield className="h-3.5 w-3.5" />
             <span>
-              Comando de Emergencia Regional · VeltrixIntegra Ecosistema
-              Digital 360
+              COEP Viña · Centro de Operaciones de Emergencia Provincial ·
+              VeltrixIntegra Ecosistema Digital 360
             </span>
           </div>
           <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-3">
@@ -662,10 +670,10 @@ function ClientOnly({ children }: { children: React.ReactNode }) {
             <img src="/logo.svg" alt="Escudo institucional" className="h-10 w-10 shrink-0" />
             <div className="flex flex-col leading-tight">
               <h1 className="text-sm font-bold text-foreground sm:text-base">
-                Comando de Emergencia Regional
+                COEP Viña · Centro de Operaciones de Emergencia Provincial
               </h1>
               <p className="text-[11px] text-muted-foreground">
-                VeltrixIntegra · Ecosistema Digital 360 · Viña del Mar
+                VeltrixIntegra · Ecosistema Digital 360 · Comuna de Viña del Mar
               </p>
             </div>
           </div>

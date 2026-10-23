@@ -48,7 +48,7 @@ function addBrandHeader(slide: pptxgen.Slide, pptx: pptxgen, subtitle: string) {
     line: { color: COLOR_ACCENT, width: 0 },
   });
   // Title bar text (small, right-aligned)
-  slide.addText('Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360', {
+  slide.addText('COEP Viña · Centro de Operaciones de Emergencia Provincial · VeltrixIntegra Ecosistema Digital 360', {
     x: 0.4, y: 0.45, w: SLIDE_W - 0.8, h: 0.3,
     align: 'right', fontSize: 9, color: COLOR_MUTED,
     fontFace: 'Arial',
@@ -64,7 +64,7 @@ function addBrandHeader(slide: pptxgen.Slide, pptx: pptxgen, subtitle: string) {
 
 function addFooter(slide: pptxgen.Slide, pageNum: number, totalPages: number) {
   slide.addText(
-    `Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360 · ${pageNum} / ${totalPages}`,
+    `COEP Viña · Centro de Operaciones de Emergencia Provincial · VeltrixIntegra Ecosistema Digital 360 · ${pageNum} / ${totalPages}`,
     {
       x: 0.4, y: SLIDE_H - 0.4, w: SLIDE_W - 0.8, h: 0.3,
       align: 'center', fontSize: 8, color: COLOR_MUTED, fontFace: 'Arial',
@@ -114,7 +114,7 @@ function slide1Title(pptx: pptxgen, data: ExportData): pptxgen.Slide {
     fill: { color: COLOR_ACCENT }, line: { color: COLOR_ACCENT, width: 0 },
   });
 
-  slide.addText('Comando de Emergencia Regional', {
+  slide.addText('COEP Viña · Centro de Operaciones de Emergencia Provincial', {
     x: 0.5, y: 1.7, w: SLIDE_W - 1, h: 1.1,
     align: 'center', fontSize: 40, bold: true, color: 'FFFFFF',
     fontFace: 'Arial',
@@ -452,7 +452,7 @@ function slide7Cumplimiento(pptx: pptxgen, _data: ExportData): pptxgen.Slide {
     align: 'center', fontSize: 26, bold: true, color: COLOR_DARK, fontFace: 'Arial',
   });
   slide.addText(
-    'Las leyes y marcos que rigen al Comando de Emergencia Regional, explicados en una línea.',
+    'Las leyes y marcos que rigen al COEP Viña · Centro de Operaciones de Emergencia Provincial, explicados en una línea.',
     {
       x: 0.5, y: 1.35, w: SLIDE_W - 1, h: 0.4,
       align: 'center', fontSize: 12, color: COLOR_MUTED, fontFace: 'Arial',
@@ -546,7 +546,7 @@ function slide9Contactos(pptx: pptxgen, _data: ExportData): pptxgen.Slide {
     align: 'center', fontSize: 26, bold: true, color: COLOR_DARK, fontFace: 'Arial',
   });
   slide.addText(
-    'Cada fuente integrada al Comando de Emergencia Regional tiene un rol específico. Estos son los canales que se monitorean en tiempo real.',
+    'Cada fuente integrada al COEP Viña · Centro de Operaciones de Emergencia Provincial tiene un rol específico. Estos son los canales que se monitorean en tiempo real.',
     {
       x: 0.5, y: 1.35, w: SLIDE_W - 1, h: 0.55,
       align: 'center', fontSize: 12, color: COLOR_MUTED, fontFace: 'Arial',
@@ -591,7 +591,7 @@ function slide10Gracias(pptx: pptxgen, _data: ExportData): pptxgen.Slide {
     x: 0.5, y: SLIDE_H / 2 - 1.2, w: SLIDE_W - 1, h: 1.2,
     align: 'center', fontSize: 60, bold: true, color: 'FFFFFF', fontFace: 'Arial',
   });
-  slide.addText('Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360', {
+  slide.addText('COEP Viña · Centro de Operaciones de Emergencia Provincial · VeltrixIntegra Ecosistema Digital 360', {
     x: 0.5, y: SLIDE_H / 2 + 0.5, w: SLIDE_W - 1, h: 0.5,
     align: 'center', fontSize: 18, color: COLOR_ACCENT, fontFace: 'Arial',
   });
@@ -609,9 +609,9 @@ function buildPresentation(data: ExportData): pptxgen {
   const pptx = new pptxgen();
   pptx.defineLayout({ name: '16x9', width: SLIDE_W, height: SLIDE_H });
   pptx.layout = '16x9';
-  pptx.author = 'Comando de Emergencia Regional';
+  pptx.author = 'COEP Viña · Centro de Operaciones de Emergencia Provincial';
   pptx.company = 'VeltrixIntegra Ecosistema Digital 360';
-  pptx.title = 'Comando de Emergencia Regional — Viña del Mar';
+  pptx.title = 'COEP Viña · Centro de Operaciones de Emergencia Provincial — Viña del Mar';
   pptx.subject = 'Informe de Emergencias';
 
   const slides: pptxgen.Slide[] = [];

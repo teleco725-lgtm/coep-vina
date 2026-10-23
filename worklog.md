@@ -341,3 +341,47 @@ Stage Summary:
 - ERROR RAÍZ encontrado y corregido: import incorrecto de useShallow en zustand v5.
 - La página ahora compila correctamente (GET / 200, 29KB HTML con el contenido correcto).
 - Restringido el sandbox (4GB): el next-server puede ser matado por OOM cuando el navegador carga los chunks JS en paralelo. El código está correcto; si el preview no carga, recargar la página (la caché .next se reconstruye).
+
+---
+Task ID: 8
+Agent: Main Orchestrator
+Task: Distinguir notificaciones verdaderas (verificadas) de falsas (rumores), mostrar solo las verdaderas, y renombrar el centro a "COEP Viña"
+
+Work Log:
+- Mini-service (mini-services/alerts-service/index.ts):
+  * Agregado campo `verified: boolean` a la interfaz BroadcastAlert.
+  * Creada función `withVerification()` que marca alertas:
+    - Fuentes oficiales (SENAPRED, CONAF, SHOA, Guardia Marina, CBV2, Carabineros) → verified=true (verdaderas)
+    - Radio (reportes ciudadanos/radioperiodismo) → verified=false el 75% de las veces (rumores), 25% verified=true (cuando SENAPRED/Carabineros confirma)
+  * Aplicado withVerification en generateAlert(), scheduleNextTide() y el bootstrap.
+- Frontend types (src/lib/types.ts):
+  * Agregado `verified?: boolean` a la interfaz BroadcastAlert.
+- Hook (src/hooks/use-alerts-socket.tsx):
+  * prependAlert: solo las alertas verificadas (verified !== false) incrementan el unreadCount de la campana. Los rumores se acumulan en la lista pero no generan notificación visible.
+- LiveFeed (src/components/dashboard/live-feed.tsx):
+  * Agregado toggle "Solo verificadas (verdaderas)" / "Todas (incl. rumores)" con Switch.
+  * Por defecto: onlyVerified=true → muestra SOLO alertas verdaderas.
+  * Badge con conteo de rumores ocultos cuando se muestran todas.
+  * Empty state diferencia "no hay verificadas" vs "no hay para este filtro".
+- AlertCard (src/components/dashboard/alert-card.tsx):
+  * Agregado badge de verificación junto al badge de fuente:
+    - "Verificada" (verde, icono BadgeCheck) con tooltip explicando fuente oficial.
+    - "Rumor" (ámbar, icono ShieldAlert) con tooltip de precaución.
+- NotificationsBell (src/app/page.tsx):
+  * Filtra verifiedRecent = recent.filter(verified !== false) → la campana SOLO muestra alertas verificadas.
+  * Empty state: "No hay notificaciones verificadas recientes".
+- Renombrado a "COEP Viña":
+  * layout.tsx: metadata title, description, keywords, authors, openGraph actualizados.
+  * page.tsx: header h1 "COEP Viña · Centro de Operaciones de Emergencia Provincial", subtítulo "VeltrixIntegra · Ecosistema Digital 360 · Comuna de Viña del Mar", footer, skeleton ClientOnly, alt de logo.
+  * manifest.webmanifest: name, short_name, description.
+  * Rutas de export (excel/word/pdf/pptx): "Comando de Emergencia Regional" → "COEP Viña · Centro de Operaciones de Emergencia Provincial".
+- Verificación:
+  * `bun run lint` → 0 errores.
+  * `curl http://localhost:3000/` → HTTP 200, HTML contiene "COEP Viña · Centro de Operaciones de Emergencia Provincial", "VeltrixIntegra · Ecosistema Digital 360 · Comuna de Viña del Mar", "Cargando panel de emergencias…".
+  * mini-service reiniciado con bun --hot, generando alertas con campo verified.
+  * No hay errores de useShallow ni de compilación en dev.log.
+
+Stage Summary:
+- SISTEMA DE VERIFICACIÓN implementado: alertas de fuentes oficiales = verdaderas (verificadas), radio = rumores (no verificadas). Dashboard muestra por defecto SOLO las verdaderas; toggle permite ver rumores.
+- RENOMBRADO completo a "COEP Viña · Centro de Operaciones de Emergencia Provincial" en todo el proyecto (header, footer, metadata, manifest, exports).
+- Código correcto y verificado. El sandbox (4GB) puede matar el next-server cuando el navegador carga chunks en paralelo; recargar el preview para reconstruir la caché.

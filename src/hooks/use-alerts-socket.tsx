@@ -58,9 +58,11 @@ const useAlertsStore = create<AlertsStore>((set) => ({
   prependAlert: (a) =>
     set((state) => ({
       alerts: [a, ...state.alerts].slice(0, MAX_ALERTS),
-      // Cada alerta nueva incrementa el contador de no leídas. Esto es
-      // feedback visual en la campana del header.
-      unreadCount: state.unreadCount + 1,
+      // Solo las alertas VERIFICadas (verdaderas) incrementan el contador de
+      // la campana. Los rumores (verified=false) se acumulan en la lista pero
+      // no generan notificación visible para no molestar al operador con
+      // reportes no confirmados.
+      unreadCount: a.verified === false ? state.unreadCount : state.unreadCount + 1,
     })),
   setStats: (s) => set({ stats: s }),
   setStatus: (s) => set({ status: s }),

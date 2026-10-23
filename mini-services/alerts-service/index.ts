@@ -42,6 +42,15 @@ export interface BroadcastAlert {
   commune?: string | null     // 'Viña del Mar' | 'Valparaíso' | 'Concón' | 'Quilpué' | 'Villa Alemana'
   meta?: Record<string, unknown> | null
   issuedAt: string            // ISO 8601
+  // VERIFICACIÓN: las alertas de fuentes oficiales (SENAPRED, CONAF, SHOA,
+  // Guardia Marina, CBV2, Carabineros) se marcan como verificadas=true (son
+  // "verdaderas" — emitidas por un organismo oficial con canal de
+  // difusión verificado). La Red de Radio se marca como verificada=false
+  // (son reportes ciudadanos / radioperiodismo — pueden ser rumores no
+  // confirmados). El dashboard COEP Viña muestra por defecto SOLO las
+  // verificadas; el operador puede activar un filtro para ver las no
+  // verificadas (rumores) en caso de necesitarlo.
+  verified: boolean
 }
 
 export interface Stats {
@@ -672,12 +681,40 @@ const CRITICAL_GENERATORS: Array<() => BroadcastAlert> = [
   () => genCarabineros(true),
 ]
 
+// ============================================================================
+// Verificación de alertas
+// ----------------------------------------------------------------------------
+// Las fuentes oficiales con canal de difusión verificado se marcan como
+// verdaderas (verified=true). La Red de Radio (reportes ciudadanos /
+// radioperiodismo) se marca como no verificada (verified=false) porque puede
+// contener rumores no confirmados. El dashboard COEP Viña muestra por defecto
+// SOLO las alertas verificadas.
+// ============================================================================
+const VERIFIED_SOURCES: ReadonlySet<SourceCode> = new Set([
+  'senapred',
+  'conaf',
+  'shoa',
+  'guardiamarina',
+  'cbv2',
+  'carabineros',
+])
+
+function withVerification(alert: BroadcastAlert): BroadcastAlert {
+  // Las alertas de radio tienen una pequeña probabilidad de estar verificadas
+  // (cuando SENAPRED o Carabineros confirma el reporte ciudadano). El resto
+  // de las veces son reportes no confirmados (rumores).
+  if (alert.sourceCode === 'radio') {
+    return { ...alert, verified: Math.random() < 0.25 }
+  }
+  return { ...alert, verified: VERIFIED_SOURCES.has(alert.sourceCode as SourceCode) }
+}
+
 function generateAlert(): BroadcastAlert {
   // Critical alerts must remain globally sparse (~5% of total).
   if (Math.random() < 0.05) {
-    return generateCriticalAlert()
+    return withVerification(generateCriticalAlert())
   }
-  return pick(REGULAR_GENERATORS)()
+  return withVerification(pick(REGULAR_GENERATORS)())
 }
 
 function generateCriticalAlert(): BroadcastAlert {
@@ -770,7 +807,7 @@ function scheduleNextTide(): void {
   // Tide cycle fires every 25-45s, cycling alta -> media -> baja -> media ...
   const delayMs = rand(25000, 45000)
   tideTimer = setTimeout(() => {
-    emitAlert(genShoaMarea())
+    emitAlert(withVerification(genShoaMarea()))
     scheduleNextTide()
   }, delayMs)
 }
@@ -809,7 +846,7 @@ httpServer.listen(PORT, () => {
     pushAlert(generateAlert())
   }
   // Force the first marea alert to be "alta" so the cycle starts cleanly.
-  pushAlert(genShoaMarea())
+  pushAlert(withVerification(genShoaMarea()))
 
   scheduleNextAlert()
   scheduleNextTide()

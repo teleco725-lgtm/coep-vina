@@ -86,8 +86,8 @@ export async function GET() {
     const wb = XLSX.utils.book_new();
     wb.Props = {
       Title: 'Informe de Emergencias — Viña del Mar',
-      Subject: 'Comando de Emergencia Regional · VeltrixIntegra Ecosistema Digital 360',
-      Author: 'Comando de Emergencia Regional',
+      Subject: 'COEP Viña · Centro de Operaciones de Emergencia Provincial · VeltrixIntegra Ecosistema Digital 360',
+      Author: 'COEP Viña · Centro de Operaciones de Emergencia Provincial',
       Company: 'VeltrixIntegra Ecosistema Digital 360',
       CreatedDate: data.generatedAt,
     };

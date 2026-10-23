@@ -74,6 +74,10 @@ export interface BroadcastAlert {
   commune?: string | null;
   meta?: Record<string, unknown> | null;
   issuedAt: string; // ISO
+  // true = alerta verificada (emitida por fuente oficial con canal confirmado).
+  // false = reporte no confirmado / rumor (típicamente radio ciudadana).
+  // El dashboard COEP Viña muestra por defecto SOLO las verificadas.
+  verified?: boolean;
 }
 
 // Evento `stats` del WS cada 15s.
