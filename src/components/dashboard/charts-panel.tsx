@@ -146,15 +146,15 @@ export function ChartsPanel({ incidents, incidentsLoading }: ChartsPanelProps) {
   // The mini-service broadcasts SHOA alerts with category 'marea' and
   // subcategory 'alta' | 'media' | 'baja'. We surface them in a dedicated
   // tab with a horizontal gauge and a clear, readable legend.
-  const mareaAlerts = useMemo(
-    () =>
-      alerts.filter(
-        (a) =>
-          a.sourceCode === 'shoa' &&
-          a.category === 'marea',
-      ),
-    [alerts],
-  );
+  const mareaAlerts = useMemo(() => {
+    const seen = new Set<string>();
+    return alerts.filter((a) => {
+      if (a.sourceCode !== 'shoa' || a.category !== 'marea') return false;
+      if (seen.has(a.id)) return false; // dedup
+      seen.add(a.id);
+      return true;
+    });
+  }, [alerts]);
   const currentMarea = mareaAlerts[0] ?? null;
   const recentMareas = mareaAlerts.slice(0, 5);
 
@@ -495,13 +495,13 @@ export function ChartsPanel({ incidents, incidentsLoading }: ChartsPanelProps) {
                     </p>
                   ) : (
                     <ul className="flex flex-col gap-1">
-                      {recentMareas.map((a) => {
+                      {recentMareas.map((a, idx) => {
                         const seg = TIDE_SEGMENTS.find(
                           (s) => s.level === a.subcategory,
                         );
                         return (
                           <li
-                            key={a.id}
+                            key={`marea-${idx}-${a.id}`}
                             className="flex items-center gap-2 text-xs"
                           >
                             <span

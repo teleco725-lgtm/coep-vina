@@ -25,7 +25,7 @@ const FILTERS: { code: FilterCode; label: string }[] = [
   { code: 'shoa', label: 'SHOA' },
   { code: 'cbv2', label: 'CBV2' },
   { code: 'carabineros', label: 'Carabineros' },
-  { code: 'radio', label: 'Radio' },
+  { code: 'chilquinta', label: 'Chilquinta' },
 ];
 
 export function LiveFeed() {

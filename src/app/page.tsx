@@ -482,15 +482,16 @@ function Dashboard() {
   // muestran en el mapa para evitar confundir al operador con reportes no
   // confirmados por una fuente oficial.
   const liveMapAlerts = useMemo(() => {
+    const seen = new Set<string>();
     return alerts
-      .filter(
-        (a) =>
-          a.verified !== false && // <-- SOLO alertas verdaderas (verificadas)
-          typeof a.lat === 'number' &&
-          typeof a.lng === 'number' &&
-          !Number.isNaN(a.lat) &&
-          !Number.isNaN(a.lng),
-      )
+      .filter((a) => {
+        if (a.verified === false) return false; // <-- SOLO verdaderas
+        if (typeof a.lat !== 'number' || typeof a.lng !== 'number') return false;
+        if (Number.isNaN(a.lat) || Number.isNaN(a.lng)) return false;
+        if (seen.has(a.id)) return false; // <-- dedup por id
+        seen.add(a.id);
+        return true;
+      })
       .slice(0, 10)
       .map((a) => ({
         id: a.id,
@@ -518,9 +519,9 @@ function Dashboard() {
           {/* Logo + title */}
           <div className="flex items-center gap-3">
             <img
-              src="/logo.svg"
+              src="/logo.png"
               alt="Escudo institucional COEP Viña"
-              className="h-10 w-10 shrink-0"
+              className="h-10 w-10 shrink-0 rounded-md object-cover"
             />
             <div className="flex flex-col leading-tight">
               <h1 className="text-sm font-bold text-foreground sm:text-base">
@@ -681,7 +682,7 @@ function ClientOnly({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen flex-col">
         <header className="glass sticky top-0 z-30 border-b backdrop-blur">
           <div className="mx-auto flex max-w-screen-2xl items-center gap-3 px-4 py-3 sm:px-6">
-            <img src="/logo.svg" alt="Escudo institucional" className="h-10 w-10 shrink-0" />
+            <img src="/logo.png" alt="Escudo institucional" className="h-10 w-10 shrink-0 rounded-md object-cover" />
             <div className="flex flex-col leading-tight">
               <h1 className="text-sm font-bold text-foreground sm:text-base">
                 COEP Viña · Centro de Operaciones de Emergencia Provincial

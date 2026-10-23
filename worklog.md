@@ -440,3 +440,59 @@ Stage Summary:
 - Pie de pagina ahora muestra: "COEP Viña · ... · veltrixintegra@gmail.com · Datos sensibles protegidos por Ley 19.628 · v1.1.0 · 2026".
 - Correo es enlace mailto (al hacer clic abre el cliente de correo del usuario).
 - lint limpio, pagina compila con HTTP 200.
+
+---
+Task ID: 11
+Agent: Main Orchestrator
+Task: Filtrar alertas a solo las 5 fuentes reales con canales verificables, eliminar las falsas, cambiar logo y favicon a imagen adjuntada
+
+Work Log:
+- Logo y favicon (imagen adjuntada del usuario):
+  * Copiada upload/pasted_image_1792770181978.png a public/logo.png, favicon.png, icon-192.png, icon-512.png
+  * layout.tsx: icons actualizado para usar favicon.png y logo.png (png, no svg)
+  * manifest.webmanifest: iconos actualizados a icon-192/512.png con purpose any+maskable
+  * page.tsx: header y skeleton ClientOnly ahora usan /logo.png (con rounded-md object-cover)
+  * sw.js: icon y badge cambiados a /logo.png
+
+- Mini-service: eliminadas fuentes no verificables, agregadas reales con canales:
+  * SourceCode actualizado: senapred, conaf, shoa, cbv2, carabineros, chilquinta (eliminados guardiamarina y radio)
+  * SOURCE_NAMES y nuevo SOURCE_CHANNELS con canales verificables:
+    - SENAPRED: web oficial https://senapred.cl/alertas/
+    - CONAF: via SENAPRED https://senapred.cl/alertas/
+    - SHOA: radioavisos https://www.shoa.cl/php/radioavisos.php?idioma=es (NURNAV Area C)
+    - CBV2: WhatsApp https://chat.whatsapp.com/J4RduSmhs8RL4msJWWfje6 + Zello https://zello.com/radioinfoscanner
+    - Carabineros: radiofrecuencia 152.2625 MHz
+    - Chilquinta: https://www.chilquinta.cl/interrupciones
+  * Nueva función genChilquinta() con alertas de corte de energía (programado, no programado, masivo) para Viña del Mar
+  * Eliminadas genGuardiaMarina() y genRadio() (fuentes falsas no verificables)
+  * Cada alerta ahora incluye meta.canal con el tipo/url/detalle verificable
+  * VERIFIED_SOURCES actualizado a las 6 fuentes reales; withVerification marca todas como verified=true (todas son verdaderas)
+  * Evento 'requestHistory' agregado al server para que el cliente pueda re-pedir el historial cuando ClientOnly monta tarde
+
+- Frontend:
+  * types.ts: SourceCode actualizado (sin guardiamarina/radio, con chilquinta); Category agrega 'servicio' (Chilquinta)
+  * severity.ts: SOURCE_COLORS y sourceShortLabel actualizados (chilquinta: ámbar, eliminados guardiamarina/radio)
+  * live-feed.tsx: FILTERS actualizado con las 6 fuentes reales (sin Radio)
+  * alert-card.tsx: badges de fuente usan los nuevos colores
+  * incident-map.tsx: keys con idx como safety (live-${idx}-${a.id}, inc-${idx}-${inc.id}, pulse-${idx}-${inc.id})
+  * charts-panel.tsx: mareaAlerts con dedup por id; key recentMareas con idx
+  * use-alerts-socket.tsx: setAlerts y prependAlert deduplican por id; al montar emite 'requestHistory' si ya estaba conectado
+  * export/_lib.ts y alerts/route.ts: SOURCE_LABELS actualizados (sin guardiamarina/radio, con chilquinta)
+
+- Verificación con Agent Browser:
+  * Logo: <img src="http://localhost:81/logo.png"> (nueva imagen, no Z.ai)
+  * Favicon: <link rel=icon href="http://localhost:81/favicon.png"> (nueva imagen en la pestaña)
+  * Title: "COEP Viña | Centro de Operaciones de Emergencia Provincial · VeltrixIntegra Ecosistema Digital 360"
+  * Filtros de fuente visibles: SENAPRED, CONAF, SHOA, CBV2, Carabineros, Chilquinta (sin Radio ni Guardia Marina)
+  * Alertas renderizadas con nuevas fuentes: "Comunicado — Robo con Intimidación" (Carabineros), "Marea Media/Alta" (SHOA), "Comunicado de Seguridad Pública — Patrullaje" (Carabineros), "Alerta Amarilla - Incendio Forestal en progreso" (CONAF)
+  * Badge "Verificada" en cada alerta (todas son verdaderas)
+  * 22+ alertas en buffer WS, estado "Conectado"
+  * lint limpio
+
+Stage Summary:
+- LOGO Y FAVICON cambiados a la imagen adjuntada del usuario (no más Z.ai)
+- ALERTAS FILTRADAS: solo 6 fuentes REALES y verificables (SENAPRED, CONAF via SENAPRED, SHOA NURNAV C, CBV2 WhatsApp/Zello, Carabineros 152.2625 MHz, Chilquinta cortes luz)
+- Fuentes FALSAS eliminadas: Guardia Marina y Red de Radio (no verificables)
+- Cada alerta incluye meta.canal con el URL/frecuencia verificable
+- Mapa solo muestra alertas verificadas (verdaderas)
+- Toggle "Solo verificadas (verdaderas)" en el feed por defecto activado

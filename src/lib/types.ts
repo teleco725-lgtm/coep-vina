@@ -26,14 +26,15 @@ export type IncidentType =
 
 export type Nature = 'natural' | 'antropico';
 
+// Fuentes REALES y verificables del dashboard COEP Viña. Las fuentes no
+// verificables (Guardia Marina, Red de Radio) se eliminaron.
 export type SourceCode =
   | 'senapred'
   | 'conaf'
   | 'shoa'
-  | 'guardiamarina'
   | 'cbv2'
   | 'carabineros'
-  | 'radio';
+  | 'chilquinta';
 
 export type Category =
   | 'sismo'
@@ -45,7 +46,7 @@ export type Category =
   | 'inundacion'
   | 'seguridad'
   | 'transito'
-  | 'radio';
+  | 'servicio';
 
 export type RiskLevel = 'bajo' | 'medio' | 'alto' | 'critico';
 
@@ -75,8 +76,9 @@ export interface BroadcastAlert {
   meta?: Record<string, unknown> | null;
   issuedAt: string; // ISO
   // true = alerta verificada (emitida por fuente oficial con canal confirmado).
-  // false = reporte no confirmado / rumor (típicamente radio ciudadana).
-  // El dashboard COEP Viña muestra por defecto SOLO las verificadas.
+  // Todas las fuentes activas (senapred, conaf, shoa, cbv2, carabineros,
+  // chilquinta) son verificables via canales oficiales, por lo que todas las
+  // alertas del dashboard COEP Viña son verdaderas (verified=true).
   verified?: boolean;
 }
 

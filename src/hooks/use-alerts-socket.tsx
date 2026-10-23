@@ -54,16 +54,36 @@ const useAlertsStore = create<AlertsStore>((set) => ({
   stats: null,
   status: 'connecting',
   unreadCount: 0,
-  setAlerts: (a) => set({ alerts: a.slice(0, MAX_ALERTS) }),
+  setAlerts: (a) =>
+    set(() => {
+      // Eliminar duplicados por id (por si el server reenvia alertas ya en el
+      // historial al reconectar el socket).
+      const seen = new Set<string>();
+      const unique = a.filter((x) => {
+        if (seen.has(x.id)) return false;
+        seen.add(x.id);
+        return true;
+      });
+      return { alerts: unique.slice(0, MAX_ALERTS) };
+    }),
   prependAlert: (a) =>
-    set((state) => ({
-      alerts: [a, ...state.alerts].slice(0, MAX_ALERTS),
-      // Solo las alertas VERIFICadas (verdaderas) incrementan el contador de
-      // la campana. Los rumores (verified=false) se acumulan en la lista pero
-      // no generan notificación visible para no molestar al operador con
-      // reportes no confirmados.
-      unreadCount: a.verified === false ? state.unreadCount : state.unreadCount + 1,
-    })),
+    set((state) => {
+      // Evitar duplicados: si la alerta ya existe (mismo id), no la añadimos.
+      // Esto puede pasar cuando el socket reconecta y el server reenvia el
+      // historial, o cuando el server retransmite la misma alerta.
+      if (state.alerts.some((x) => x.id === a.id)) {
+        return state;
+      }
+      return {
+        alerts: [a, ...state.alerts].slice(0, MAX_ALERTS),
+        // Solo las alertas VERIFICadas (verdaderas) incrementan el contador de
+        // la campana. Los rumores (verified=false) se acumulan en la lista pero
+        // no generan notificación visible para no molestar al operador con
+        // reportes no confirmados.
+        unreadCount:
+          a.verified === false ? state.unreadCount : state.unreadCount + 1,
+      };
+    }),
   setStats: (s) => set({ stats: s }),
   setStatus: (s) => set({ status: s }),
   markAllRead: () => set({ unreadCount: 0 }),
@@ -194,8 +214,14 @@ export function useAlertsSocket(): {
     socket.on('alert', onAlert);
     socket.on('stats', onStats);
 
-    // Si el socket ya estaba conectado al montar, forzamos el estado.
-    if (socket.connected) setStatus('connected');
+    // Si el socket ya estaba conectado al montar (sharedSocket reutilizado),
+    // forzamos el estado y pedimos el historial explícitamente para no perderlo.
+    if (socket.connected) {
+      setStatus('connected');
+      socket.emit('requestHistory');
+    }
+    // Re-pedir historial en cada reconexión para no perder alertas.
+    socket.on('connect', () => socket.emit('requestHistory'));
 
     return () => {
       socket.off('connect', onConnect);

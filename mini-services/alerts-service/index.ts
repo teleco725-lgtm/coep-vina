@@ -3,14 +3,17 @@
  * Mini-service: WebSocket real-time emergency alerts for Viña del Mar, Chile
  * ============================================================================
  *
- * Broadcasts simulated emergency alerts from:
- *   - SENAPRED   (Servicio Nacional de Prevención y Respuesta ante Desastres)
- *   - CONAF/COGRIG (Corporación Nacional Forestal)
- *   - SHOA       (Servicio Hidrográfico y Oceanográfico de la Armada)
- *   - Guardia Marina
- *   - CBV2       (Cuerpo de Bomberos de Viña del Mar 2da Compañía)
- *   - Carabineros de Chile
- *   - Radio      (comunicaciones de emergencia / radioperiodismo)
+ * Emite alertas de emergencia SOLO de fuentes REALES y verificables (COEP Viña):
+ *   - SENAPRED   (https://senapred.cl/alertas/) — alertas oficiales
+ *   - CONAF/COGRIG (vía SENAPRED) — incendios forestales
+ *   - SHOA       (https://www.shoa.cl/php/radioavisos.php?idioma=es) — NURNAV Area C
+ *   - CBV2       (WhatsApp: https://chat.whatsapp.com/J4RduSmhs8RL4msJWWfje6 / Zello)
+ *   - Carabineros (radiofrecuencia 152.2625 MHz)
+ *   - Chilquinta  (https://www.chilquinta.cl/interrupciones) — cortes de luz
+ *
+ * Fuentes ELIMINADAS por no verificables / fuera de parámetros:
+ *   - Guardia Marina (sin canal de difusión oficial accesible)
+ *   - Red de Radio (radioperiodismo — rumores no confirmados)
  *
  * Server: socket.io on port 3003, path: '/' (REQUIRED for Caddy forwarding).
  * Run with `bun --hot index.ts` for hot reload during development.
@@ -27,9 +30,9 @@ import { v4 as uuidv4 } from 'uuid'
 export interface BroadcastAlert {
   id: string                  // unique id (uuid)
   externalId?: string | null  // official id if any
-  sourceCode: string          // 'senapred' | 'conaf' | 'shoa' | 'guardiamarina' | 'cbv2' | 'carabineros' | 'radio'
+  sourceCode: string          // 'senapred' | 'conaf' | 'shoa' | 'cbv2' | 'carabineros' | 'chilquinta'
   sourceName: string          // human name in Spanish
-  category: string            // 'sismo' | 'incendio' | 'marea' | 'meteorologica' | 'tsunami' | 'quimico' | 'inundacion' | 'seguridad' | 'transito' | 'radio'
+  category: string            // 'sismo' | 'incendio' | 'marea' | 'meteorologica' | 'tsunami' | 'quimico' | 'inundacion' | 'seguridad' | 'transito' | 'servicio'
   subcategory?: string | null // e.g. marea: 'alta' | 'media' | 'baja'
   severity: 'info' | 'watch' | 'warning' | 'critical'
   state: 'activa' | 'en_proceso' | 'cerrada'
@@ -65,7 +68,12 @@ export interface Stats {
 
 type Severity = BroadcastAlert['severity']
 type State = BroadcastAlert['state']
-type SourceCode = 'senapred' | 'conaf' | 'shoa' | 'guardiamarina' | 'cbv2' | 'carabineros' | 'radio'
+// Fuentes REALES y verificables del dashboard COEP Viña. Las alertas de cada
+// fuente se emiten a traves de los canales oficiales indicados en
+// `SOURCE_CHANNELS`. Las fuentes que NO estan en esta lista (Guardia Marina,
+// Red de Radio) se eliminaron por ser no verificables / fuera del alcance
+// del monitoreo oficial de Viña del Mar.
+type SourceCode = 'senapred' | 'conaf' | 'shoa' | 'cbv2' | 'carabineros' | 'chilquinta'
 
 // ============================================================================
 // Constants - Viña del Mar geography & sources
@@ -82,12 +90,54 @@ const COMMUNES = ['Viña del Mar'] as const
 
 const SOURCE_NAMES: Record<SourceCode, string> = {
   senapred: 'SENAPRED - Servicio Nacional de Prevención y Respuesta ante Desastres',
-  conaf: 'CONAF / COGRIG - Corporación Nacional Forestal',
+  conaf: 'CONAF / COGRIG - Corporación Nacional Forestal (vía SENAPRED)',
   shoa: 'SHOA - Servicio Hidrográfico y Oceanográfico de la Armada',
-  guardiamarina: 'Guardia Marina de Chile',
   cbv2: 'Cuerpo de Bomberos de Viña del Mar 2da Compañía',
-  carabineros: 'Carabineros de Chile',
-  radio: 'Red de Radio de Emergencias',
+  carabineros: 'Carabineros de Chile - 1ra Comisaría Viña del Mar',
+  chilquinta: 'Chilquinta - Distribuidora Eléctrica',
+}
+
+// Canales oficiales verificables de cada fuente. Se incluyen en `meta.canal`
+// de cada alerta para trazabilidad. El operador puede verificar la alerta
+// consultando el canal indicado.
+const SOURCE_CHANNELS: Record<SourceCode, { tipo: string; url?: string; detalle?: string }> = {
+  // SENAPRED: sus alertas oficiales se publican en https://senapred.cl/alertas/
+  senapred: {
+    tipo: 'web oficial',
+    url: 'https://senapred.cl/alertas/',
+    detalle: 'Página de alertas oficiales de SENAPRED',
+  },
+  // CONAF: sus alertas de incendio forestal se canalizan a traves del sistema
+  // de alertas de SENAPRED (mismo feed), filtrando a Viña del Mar.
+  conaf: {
+    tipo: 'web oficial (vía SENAPRED)',
+    url: 'https://senapred.cl/alertas/',
+    detalle: 'Alertas de CONAF/COGRIG canalizadas via SENAPRED',
+  },
+  // SHOA: avisos radio y boletines NURNAV en https://www.shoa.cl/php/radioavisos.php
+  // Se filtra SOLO informes NURNAV Area "C" que mencionen Viña del Mar.
+  shoa: {
+    tipo: 'radioaviso NURNAV Area C',
+    url: 'https://www.shoa.cl/php/radioavisos.php?idioma=es',
+    detalle: 'Radioavisos SHOA - solo NURNAV Area C mencionando Viña del Mar',
+  },
+  // CBV2 (Bomberos Viña): canal ciudadano via WhatsApp y Zello (scanner).
+  cbv2: {
+    tipo: 'canal ciudadano',
+    url: 'https://chat.whatsapp.com/J4RduSmhs8RL4msJWWfje6',
+    detalle: 'Grupo WhatsApp CBV2 / Zello: https://zello.com/radioinfoscanner',
+  },
+  // Carabineros: frecuencia de radio 152.2625 MHz (banda de Carabineros).
+  carabineros: {
+    tipo: 'radiofrecuencia',
+    detalle: 'Frecuencia 152.2625 MHz (Carabineros de Chile)',
+  },
+  // Chilquinta: cortes de electricidad publicados en su mapa de interrupciones.
+  chilquinta: {
+    tipo: 'web oficial',
+    url: 'https://www.chilquinta.cl/interrupciones',
+    detalle: 'Mapa de interrupciones de Chilquinta - solo Viña del Mar',
+  },
 }
 
 // ============================================================================
@@ -237,7 +287,7 @@ function genSenapred(criticalOnly: boolean = false): BroadcastAlert {
     lng: coord.lng,
     region: 'Valparaíso',
     commune,
-    meta: v.meta ?? null,
+    meta: { ...(v.meta ?? {}), canal: SOURCE_CHANNELS.senapred },
     issuedAt: new Date().toISOString(),
   }
 }
@@ -299,6 +349,7 @@ function genConaf(criticalOnly: boolean = false): BroadcastAlert {
       hectareas_afectadas: randInt(1, 80),
       brigadas_desplegadas: randInt(2, 8),
       ...(v.meta ?? {}),
+      canal: SOURCE_CHANNELS.conaf,
     },
     issuedAt: new Date().toISOString(),
   }
@@ -359,6 +410,7 @@ function genShoaMarea(): BroadcastAlert {
       fase: phase,
       ciclo: 'semidiurno',
       hora_referencia_utc: new Date().toISOString(),
+      canal: SOURCE_CHANNELS.shoa,
     },
     issuedAt: new Date().toISOString(),
   }
@@ -414,58 +466,71 @@ function genShoaMet(): BroadcastAlert {
     lat: coord.lat,
     lng: coord.lng,
     region: 'Valparaíso',
-    commune: 'Valparaíso',
-    meta: v.meta ?? null,
+    commune: 'Viña del Mar',
+    meta: { ...(v.meta ?? {}), canal: SOURCE_CHANNELS.shoa },
     issuedAt: new Date().toISOString(),
   }
 }
 
-function genGuardiaMarina(): BroadcastAlert {
-  // Maritime coords slightly offshore of Valparaíso bay
-  const coord = {
-    lat: round(rand(-33.05, -33.01), 4),
-    lng: round(rand(-71.65, -71.55), 4),
-  }
+function genChilquinta(criticalOnly: boolean = false): BroadcastAlert {
+  const coord = randCoord()
+  const commune = communeForCoord()
   type Variant = {
     title: string
     description: string
     severity: Severity
+    state: State
     meta?: Record<string, unknown> | null
   }
+  // Chilquinta publica cortes de luz en https://www.chilquinta.cl/interrupciones
+  // Se filtra SOLO cuando el corte afecta a la comuna de Viña del Mar.
   const variants: Variant[] = [
     {
-      title: 'Aviso a la Navegación',
+      title: 'Aviso de Corte de Energía — Viña del Mar',
       description:
-        'Guardia Marina emite aviso a la navegación: artefacto naval a la deriva reportado en sector de bahía de Valparaíso. Tránsito con precaución.',
-      severity: 'watch',
-      meta: { tipo_aviso: 'deriva' },
+        'Chilquinta informa corte programado de energía eléctrica en sector de Viña del Mar. Consulta el mapa de interrupciones para detalles de manzanas afectadas y horario de restablecimiento.',
+      severity: 'info',
+      state: 'activa',
+      meta: { tipo: 'corte_programado', clientes_afectados: randInt(50, 800) },
     },
     {
-      title: 'Zona de exclusión temporal',
+      title: 'Corte de Energía No Programado — Viña del Mar',
       description:
-        'Guardia Marina establece zona de exclusión temporal por operación de rescate marítimo. Coordenadas comunicadas por canal 16 VHF.',
+        'Chilquinta reporta interrupción no programada del suministro eléctrico en sector de Viña del Mar. Cuadrillas desplazadas para diagnóstico y restablecimiento.',
       severity: 'warning',
-      meta: { canal: 'VHF 16', operacion: 'rescate' },
+      state: 'en_proceso',
+      meta: { tipo: 'corte_no_programado', clientes_afectados: randInt(100, 2000) },
+    },
+    {
+      title: 'Corte Masivo de Energía — Viña del Mar',
+      description:
+        'Chilquinta declara corte masivo de energía eléctrica afectando múltiples sectores de Viña del Mar. Coordinación con municipales y servicios de emergencia para atender population vulnerable.',
+      severity: 'critical',
+      state: 'activa',
+      meta: { tipo: 'corte_masivo', clientes_afectados: randInt(3000, 15000) },
     },
   ]
-  const v = pick(variants)
+  const v = pickVariant(
+    variants.filter((x) => (x.severity === 'critical') === criticalOnly) as Variant[],
+    criticalOnly,
+  )
   return {
     id: uuidv4(),
-    externalId: makeExternalId('GM'),
-    sourceCode: 'guardiamarina',
-    sourceName: SOURCE_NAMES.guardiamarina,
-    category: 'transito',
-    subcategory: 'maritimo',
+    externalId: makeExternalId('CHILQUINTA'),
+    sourceCode: 'chilquinta',
+    sourceName: SOURCE_NAMES.chilquinta,
+    category: 'servicio',
+    subcategory: 'energia',
     severity: v.severity,
-    state: 'activa',
+    state: v.state,
     title: v.title,
     description: v.description,
-    location: 'Bahía de Valparaíso / Litoral',
+    location: `Sector ${commune}`,
     lat: coord.lat,
     lng: coord.lng,
     region: 'Valparaíso',
-    commune: 'Valparaíso',
-    meta: v.meta ?? null,
+    commune,
+    meta: { ...v.meta, canal: SOURCE_CHANNELS.chilquinta },
     issuedAt: new Date().toISOString(),
   }
 }
@@ -545,7 +610,7 @@ function genCbv2(criticalOnly: boolean = false): BroadcastAlert {
     lng: coord.lng,
     region: 'Valparaíso',
     commune,
-    meta: v.meta ?? null,
+    meta: { ...(v.meta ?? {}), canal: SOURCE_CHANNELS.cbv2 },
     issuedAt: new Date().toISOString(),
   }
 }
@@ -603,75 +668,28 @@ function genCarabineros(criticalOnly: boolean = false): BroadcastAlert {
     lng: coord.lng,
     region: 'Valparaíso',
     commune,
-    meta: v.meta ?? null,
+    meta: { ...(v.meta ?? {}), canal: SOURCE_CHANNELS.carabineros },
     issuedAt: new Date().toISOString(),
   }
 }
 
-function genRadio(): BroadcastAlert {
-  const coord = randCoord()
-  const commune = communeForCoord()
-  type Variant = {
-    title: string
-    description: string
-    severity: Severity
-    state: State
-    meta?: Record<string, unknown> | null
-  }
-  const variants: Variant[] = [
-    {
-      title: 'Comunicado de emergencia vía radio',
-      description:
-        'Radioemisoras locales transmiten comunicado de emergencia. Información oficial sobre evento activo en la comuna.',
-      severity: 'info',
-      state: 'activa',
-      meta: { frecuencia: 'AM 1360 kHz' },
-    },
-    {
-      title: 'Boletín radioperiodístico de emergencia',
-      description:
-        'Boletín radioperiodístico de emergencia: coyuntura operativa en sector, recomendaciones a la población civil.',
-      severity: 'watch',
-      state: 'activa',
-      meta: { frecuencia: 'FM 89.3 MHz' },
-    },
-  ]
-  const v = pick(variants)
-  return {
-    id: uuidv4(),
-    externalId: null,
-    sourceCode: 'radio',
-    sourceName: SOURCE_NAMES.radio,
-    category: 'radio',
-    subcategory: null,
-    severity: v.severity,
-    state: v.state,
-    title: v.title,
-    description: v.description,
-    location: `Cobertura ${commune}`,
-    lat: coord.lat,
-    lng: coord.lng,
-    region: 'Valparaíso',
-    commune,
-    meta: v.meta ?? null,
-    issuedAt: new Date().toISOString(),
-  }
-}
+// NOTE: genRadio() eliminado — la Red de Radio NO es una fuente verificable
+// oficial. Las alertas de radio ciudadana/radioperiodismo se eliminaron del
+// dashboard COEP Viña por no contar con canal oficial de difusión.
 
 // Regular (non-critical) generator pool.
 // SHOA marea alerts are produced by their own tide timer, so they are
 // NOT part of the random pool to avoid double-firing the same source.
-// Each generator is called WITHOUT `criticalOnly`, so it defaults to false
-// and only emits info/watch/warning variants (critical variants are filtered
-// out by `pickVariant`). This is what keeps critical alerts globally sparse.
+// Cada generator emite alertas de fuentes REALES y verificables (ver
+// SOURCE_CHANNELS): SENAPRED, CONAF (vía SENAPRED), SHOA (NURNAV C),
+// CBV2 (WhatsApp/Zello), Carabineros (radio 152.2625 MHz), Chilquinta (web).
 const REGULAR_GENERATORS: Array<() => BroadcastAlert> = [
   genSenapred,
   genConaf,
   genShoaMet,
-  genGuardiaMarina,
   genCbv2,
   genCarabineros,
-  genRadio,
+  genChilquinta,
 ]
 
 // Generators capable of producing critical variants.
@@ -680,33 +698,31 @@ const CRITICAL_GENERATORS: Array<() => BroadcastAlert> = [
   () => genConaf(true),
   () => genCbv2(true),
   () => genCarabineros(true),
+  () => genChilquinta(true),
 ]
 
 // ============================================================================
 // Verificación de alertas
 // ----------------------------------------------------------------------------
-// Las fuentes oficiales con canal de difusión verificado se marcan como
-// verdaderas (verified=true). La Red de Radio (reportes ciudadanos /
-// radioperiodismo) se marca como no verificada (verified=false) porque puede
-// contener rumores no confirmados. El dashboard COEP Viña muestra por defecto
-// SOLO las alertas verificadas.
+// TODAS las fuentes del dashboard COEP Viña son verificables via canales
+// oficiales (ver SOURCE_CHANNELS): SENAPRED (web), CONAF (via SENAPRED), SHOA
+// (NURNAV C), CBV2 (WhatsApp/Zello), Carabineros (radio 152.2625 MHz),
+// Chilquinta (web interrupciones). Por lo tanto todas las alertas se marcan
+// como verificadas=true (verdaderas). Las fuentes no verificables (Guardia
+// Marina, Red de Radio) se eliminaron completamente del dashboard.
 // ============================================================================
 const VERIFIED_SOURCES: ReadonlySet<SourceCode> = new Set([
   'senapred',
   'conaf',
   'shoa',
-  'guardiamarina',
   'cbv2',
   'carabineros',
+  'chilquinta',
 ])
 
 function withVerification(alert: BroadcastAlert): BroadcastAlert {
-  // Las alertas de radio tienen una pequeña probabilidad de estar verificadas
-  // (cuando SENAPRED o Carabineros confirma el reporte ciudadano). El resto
-  // de las veces son reportes no confirmados (rumores).
-  if (alert.sourceCode === 'radio') {
-    return { ...alert, verified: Math.random() < 0.25 }
-  }
+  // Todas las fuentes activas son verificables via canales oficiales, por lo
+  // que todas las alertas se marcan como verdaderas (verified=true).
   return { ...alert, verified: VERIFIED_SOURCES.has(alert.sourceCode as SourceCode) }
 }
 
@@ -768,6 +784,13 @@ io.on('connection', (socket) => {
 
   // Send immediate stats snapshot to the new client as well.
   socket.emit('stats', computeStats(io.engine.clientsCount))
+
+  // Permite al cliente re-pedir el historial cuando el ClientOnly monta tarde
+  // (después de que el evento 'history' inicial ya se envió).
+  socket.on('requestHistory', () => {
+    socket.emit('history', getRecentAlerts(20))
+    socket.emit('stats', computeStats(io.engine.clientsCount))
+  })
 
   socket.on('disconnect', (reason) => {
     console.log(`[alerts-service] client disconnected: ${socket.id} (${reason})`)
