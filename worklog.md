@@ -724,3 +724,43 @@ Stage Summary:
 - Tab "Mareas" reemplazado por tab "NURNAV" que muestra radioavisos oficiales.
 - Las alertas ahora reflejan la realidad de las páginas oficiales: SENAPRED (alerta meteorológica), Chilquinta (cortes de luz), SHOA (NURNAV, no mareas), CBV2 (sin incendios), Carabineros (comunicados).
 - KPI Incidentes Activos: 5 (inundación, deslizamiento, accidente, 2 delitos — SIN incendios).
+
+---
+Task ID: 17
+Agent: Main Orchestrator
+Task: Crear instructivo en PDF basado en el formato de VeltrixIntegra, didactico y humanizado
+
+Work Log:
+- Leido el documento Word "Formato de documantacion.docx" del usuario:
+  * Template VeltrixIntegra con header/footer institucional
+  * Datos: Claudio Urbina Vargas, Fundador VeltrixIntegra
+  * Direccion: Las Acacias 450 poniente paradero 12, Villa Alemana
+  * Contacto: +56 9 9619 4440, claudio.urbina@vtr.net
+  * Logo y banner extraidos del docx
+- Creado script Python (scripts/gen_instructivo.py) con ReportLab:
+  * Portada con fondo azul petroleo + banda dorada + logo VeltrixIntegra
+  * Header en cada pagina: "VeltrixIntegra | Ecosistema Digital 360"
+  * Footer en cada pagina: contacto de Claudio Urbina Vargas
+  * 11 secciones didacticas con lenguaje humanizado (sin tecnicismos):
+    1. Para que sirve este panel?
+    2. Las fuentes de informacion: de donde salen los datos?
+    3. Como leer el mapa de emergencias?
+    4. El feed en vivo: alertas que llegan ahora mismo
+    5. La campana de notificaciones
+    6. Como distinguir alertas verdaderas de rumores
+    7. El pipeline de depuracion: como se limpian los datos falsos
+    8. Las fichas FIBER: registro de personas en riesgo
+    9. Exportar datos: como descargar informes
+    10. Cumplimiento legal: que leyes se respetan
+    11. Preguntas frecuentes
+  * Tablas con colores institucionales (azul petroleo + arena dorada)
+  * Metadata del PDF: titulo, autor, asunto, creador
+- Generado PDF: 13 paginas, 235 KB
+- Ubicacion: /home/z/my-project/download/Instructivo_COEP_Vina_VeltrixIntegra.pdf
+
+Stage Summary:
+- Instructivo en PDF creado con formato VeltrixIntegra (portada, header, footer institucional)
+- 13 paginas con 11 secciones didacticas en lenguaje sencillo y humanizado
+- Cubre todo el uso del panel: fuentes, mapa, feed, campana, verificacion, pipeline TTL, fichas FIBER, exportacion, cumplimiento legal, FAQ
+- Tono didactico y facil de entender (sin tecnicismos, con analogias cotidianas)
+- Disponible en /home/z/my-project/download/Instructivo_COEP_Vina_VeltrixIntegra.pdf
