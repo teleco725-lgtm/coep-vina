@@ -476,11 +476,15 @@ function Dashboard() {
     staleTime: 60_000,
   });
 
-  // Live alerts overlay for the map: only those with valid coords, newest 10.
+  // Live alerts overlay for the map: ONLY verified (true) alerts with valid
+  // coords, newest 10. Las alertas falsas (rumores, verified=false) NO se
+  // muestran en el mapa para evitar confundir al operador con reportes no
+  // confirmados por una fuente oficial.
   const liveMapAlerts = useMemo(() => {
     return alerts
       .filter(
         (a) =>
+          a.verified !== false && // <-- SOLO alertas verdaderas (verificadas)
           typeof a.lat === 'number' &&
           typeof a.lng === 'number' &&
           !Number.isNaN(a.lat) &&

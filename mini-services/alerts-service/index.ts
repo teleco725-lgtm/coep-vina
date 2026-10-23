@@ -175,15 +175,10 @@ function genSenapred(criticalOnly: boolean = false): BroadcastAlert {
       state: 'activa',
       meta: { magnitud: rand(4.0, 5.5).toFixed(1), profundidad_km: randInt(20, 80) },
     },
-    {
-      category: 'tsunami',
-      title: 'Alerta Amarilla - Posible Tsunami',
-      description:
-        'SENAPRED emite Alerta Amarilla por posible tsunami producto de sismo de magnitud relevante en zona de subducción. SHOA evalúa niveles de marea. Población costera debe alejarse del litoral.',
-      severity: 'warning',
-      state: 'activa',
-      meta: { evaluacion_shoa: 'en_curso' },
-    },
+    // NOTA: La alerta de tsunami en Chile la emite el SHOA (Servicio
+    // Hidrográfico y Oceanográfico de la Armada) / Directemar, NO SENAPRED.
+    // SENAPRED coordina la respuesta pero la declaratoria de amenaza de
+    // tsunami es competencia del SHOA. Por eso esta alerta NO va aquí.
     {
       category: 'inundacion',
       title: 'Alerta Roja - Inundación súbita',
@@ -203,7 +198,7 @@ function genSenapred(criticalOnly: boolean = false): BroadcastAlert {
       meta: { precipitacion_esperada_mm: randInt(30, 80), vientos_kmh: randInt(40, 80) },
     },
     {
-      category: 'inundacion',
+      category: 'meteorologica',
       subcategory: 'aluvion',
       title: 'Alerta Temprana Preventiva - Riesgo de aluvión',
       description:
@@ -212,15 +207,9 @@ function genSenapred(criticalOnly: boolean = false): BroadcastAlert {
       state: 'activa',
       meta: null,
     },
-    {
-      category: 'quimico',
-      title: 'Alerta Roja - Emergencia química',
-      description:
-        'SENAPRED emite Alerta Roja por emergencia química en zona industrial. Se activa protocolo de evacuación y confinamiento perimetral.',
-      severity: 'critical',
-      state: 'activa',
-      meta: { sustancia: 'amoniaco', area_perimetro_m: randInt(200, 800) },
-    },
+    // NOTA: Las emergencias químicas las atienden Bomberos (CBV2) y el SIICH,
+    // no SENAPRED directamente. Esta alerta se eliminó de SENAPRED y se
+    // mantiene en CBV2 con la clave correspondiente.
     {
       category: 'sismo',
       title: 'Cierre de Alerta Temprana Preventiva',
@@ -391,12 +380,22 @@ function genShoaMet(): BroadcastAlert {
       severity: 'watch',
       meta: { viento_nudos: randInt(20, 35), mar_fondo_m: rand(2, 3.5).toFixed(1) },
     },
+    // SHOA es el organismo oficial en Chile que declara AMENAZA DE TSUNAMI
+    // (no SENAPRED). Tras un sismo de magnitud relevante, SHOA evalúa y emite
+    // el boletín de tsunami con el estado de amenaza.
     {
-      title: 'Aviso de Mal Tiempo Costero',
+      title: 'Boletín de Tsunami - Amenaza de Tsunami',
       description:
-        'SHOA emite aviso de mal tiempo para zona costera de Valparaíso. Mar de leva esperada en las próximas 12 horas.',
+        'SHOA emite boletín de tsunami: se declara estado de Amenaza de Tsunami para el litoral de la Región de Valparaíso tras sismo de magnitud relevante. Población costera debe alejarse del litoral y seguir instrucciones de Autoridad Marítima.',
       severity: 'warning',
-      meta: { mar_leva_m: rand(2.5, 4.0).toFixed(1) },
+      meta: { estado: 'amenaza', fuente_evaluadora: 'SHOA', canal: '16 VHF' },
+    },
+    {
+      title: 'Boletín de Tsunami - Sin Amenaza',
+      description:
+        'SHOA emite boletín de tsunami: se descarta amenaza de tsunami para las costas de la Región de Valparaíso tras análisis del evento sísmico. Operaciones marítimas retoman normalidad.',
+      severity: 'info',
+      meta: { estado: 'sin_amenaza', fuente_evaluadora: 'SHOA' },
     },
   ]
   const v = pick(variants)
@@ -442,13 +441,6 @@ function genGuardiaMarina(): BroadcastAlert {
       meta: { tipo_aviso: 'deriva' },
     },
     {
-      title: 'Viento y Mar Lluvia',
-      description:
-        'Guardia Marina reporta viento y mar lluvia en sector costero. Se recomienda a embarcaciones menores permanecer en puerto.',
-      severity: 'warning',
-      meta: { viento_kmh: randInt(40, 70) },
-    },
-    {
       title: 'Zona de exclusión temporal',
       description:
         'Guardia Marina establece zona de exclusión temporal por operación de rescate marítimo. Coordenadas comunicadas por canal 16 VHF.',
@@ -491,40 +483,49 @@ function genCbv2(criticalOnly: boolean = false): BroadcastAlert {
   }
   const variants: Variant[] = [
     {
-      title: 'Llamado de Emergencia',
+      title: 'Clave 1-1 — Llamado de Emergencia',
       description:
-        'CBV2 2da Compañía de Bomberos de Viña del Mar atiende llamado de emergencia. Unidades desplazadas al sector reportado.',
+        'Central de Alarmas del Cuerpo de Bomberos de Viña del Mar despacha unidades a Clave 1-1 (emergencia estructural simple). Unidades en ruta al sector reportado.',
       severity: 'watch',
       state: 'en_proceso',
       category: 'incendio',
-      meta: { unidades: randInt(2, 4) },
+      meta: { clave: '1-1', unidades: randInt(2, 4) },
     },
     {
-      title: 'Incendio Estructural',
+      title: 'Clave 2-2 — Incendio Forestal',
       description:
-        'CBV2 combate incendio estructural en vivienda del sector. Trabajo de extinción y ventilación en progreso. Bomberos solicitan cortar suministro eléctrico.',
+        'CBV2 despacha a Clave 2-2 (llamado forestal rural). Combate de incendio forestal en progreso con apoyo de brigada CONAF. Trabajo de extinción y corte de avance.',
       severity: 'warning',
       state: 'activa',
       category: 'incendio',
-      meta: { viviendas_afectadas: randInt(1, 3) },
+      meta: { clave: '2-2', viviendas_afectadas: randInt(0, 2) },
     },
     {
-      title: 'Rescate Vehicular',
+      title: 'Clave 3-1 — Incendio Estructural',
       description:
-        'CBV2 realiza rescate vehicular en ruta. Apoyo médico y corte de tránsito coordinado con Carabineros.',
+        'CBV2 combate incendio estructural a Clave 3-1 en vivienda del sector. Trabajo de extinción y ventilación en progreso. Bomberos solicitan cortar suministro eléctrico.',
+      severity: 'warning',
+      state: 'activa',
+      category: 'incendio',
+      meta: { clave: '3-1', viviendas_afectadas: randInt(1, 3) },
+    },
+    {
+      title: 'Clave 3-1 — Rescate Vehicular',
+      description:
+        'CBV2 realiza rescate vehicular a Clave 3-1 en ruta. Apoyo médico y corte de tránsito coordinado con Carabineros.',
       severity: 'warning',
       state: 'en_proceso',
       category: 'transito',
-      meta: { tipo: 'rescate_vehicular' },
+      meta: { clave: '3-1', tipo: 'rescate_vehicular' },
     },
     {
-      title: 'Emergencia con Materiales Peligrosos',
+      title: 'Clave 4 — Emergencia con Materiales Peligrosos',
       description:
-        'CBV2 activa protocolo de materiales peligrosos en sector industrial. Perímetro de seguridad establecido.',
+        'CBV2 activa Clave 4 (materiales peligrosos / Hazmat) en sector industrial. Perímetro de seguridad establecido. Coordinación con SIICH y mutual aid.',
       severity: 'critical',
       state: 'activa',
       category: 'quimico',
-      meta: { protocolo: 'hazmat' },
+      meta: { clave: '4', protocolo: 'hazmat' },
     },
   ]
   const v = pickVariant(variants, criticalOnly)
@@ -561,28 +562,28 @@ function genCarabineros(criticalOnly: boolean = false): BroadcastAlert {
   }
   const variants: Variant[] = [
     {
-      title: 'Nueva alerta de seguridad',
+      title: 'Comunicado de Seguridad Pública — Patrullaje',
       description:
-        'Carabineros reporta nueva alerta de seguridad en sector urbano. Patrullas desplegadas para disuadir y proteger a la población.',
+        'Carabineros de la 1ra Comisaría de Viña del Mar informa despliegue de patrullaje reforzado en sector urbano por aumento de denuncias. Se solicita a vecinos reportar al 133.',
       severity: 'watch',
       state: 'en_proceso',
-      meta: { patrullas: randInt(2, 6) },
+      meta: { patrullas: randInt(2, 6), telefono_emergencia: '133' },
     },
     {
-      title: 'Alerta de seguridad - Robo con intimidación',
+      title: 'Comunicado — Robo con Intimidación',
       description:
-        'Carabineros reporta robo con intimidación en sector comercial. Perímetro establecido, búsqueda de antecedentes en curso.',
+        'Carabineros reporta robo con intimidación en sector comercial de Viña del Mar. Perímetro establecido, pesquisa de antecedentes en curso. Testigos llamar al 133.',
       severity: 'warning',
       state: 'en_proceso',
-      meta: { tipo: 'robo_intimidacion' },
+      meta: { tipo: 'robo_intimidacion', telefono_emergencia: '133' },
     },
     {
-      title: 'Alerta de seguridad - Sospechoso armado',
+      title: 'Comunicado — Sospechoso Armado',
       description:
-        'Carabineros activa protocolo de seguridad por sospechoso armado en sector. Se solicita a vecinos resguardarse en interiores.',
+        'Carabineros activa protocolo por sospechoso armado en sector de Viña del Mar. Se solicita a vecinos resguardarse en interiores. Operativo en curso.',
       severity: 'critical',
       state: 'activa',
-      meta: { protocolo: 'red_cobro' },
+      meta: { protocolo: 'red_cobro', telefono_emergencia: '133' },
     },
   ]
   const v = pickVariant(variants, criticalOnly)

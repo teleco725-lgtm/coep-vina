@@ -385,3 +385,39 @@ Stage Summary:
 - SISTEMA DE VERIFICACIÓN implementado: alertas de fuentes oficiales = verdaderas (verificadas), radio = rumores (no verificadas). Dashboard muestra por defecto SOLO las verdaderas; toggle permite ver rumores.
 - RENOMBRADO completo a "COEP Viña · Centro de Operaciones de Emergencia Provincial" en todo el proyecto (header, footer, metadata, manifest, exports).
 - Código correcto y verificado. El sandbox (4GB) puede matar el next-server cuando el navegador carga chunks en paralelo; recargar el preview para reconstruir la caché.
+
+---
+Task ID: 9
+Agent: Main Orchestrator
+Task: Comparar las notificaciones con lo que realmente emiten las instituciones en internet, eliminar las falsas del mapa y dejar solo las verdaderas
+
+Work Log:
+- Investigación web (z-ai web_search) de lo que realmente emiten las instituciones chilenas:
+  * SENAPRED: 3 tipos de alerta — Alerta Temprana Preventiva, Alerta Amarilla, Alerta Roja (sismo, inundación, sistema frontal). NO emite alertas de tsunami (eso lo hace SHOA).
+  * CONAF/COGRIG: Alerta Amarilla y Alerta Roja por incendios forestales; COGRIG detecta focos de calor.
+  * SHOA (Servicio Hidrográfico y Oceanográfico de la Armada): Boletines meteorológicos marítimos, tablas de marea (pleamar/bajamar), y BOLETINES DE TSUNAMI (amenaza de tsunami — SHOA es el organismo oficial que la declara en Chile).
+  * Bomberos de Viña del Mar: Sistema de CLAVES (Clave 1-1 estructural simple, Clave 2-2 forestal rural, Clave 3-1 vehicular/estructural, Clave 4 materiales peligrosos) despachadas desde la Central de Alarmas.
+  * Carabineros: COMUNICADOS de seguridad pública (NO "alertas" con ese nombre), maneja hechos delictuales atendidos, emergencias via 133.
+  * Guardia Marina: Avisos a la navegación, zonas de exclusión temporal (NO "viento y mar lluvia").
+
+- Correcciones al mini-service (mini-services/alerts-service/index.ts):
+  * SENAPRED: eliminada "Alerta Amarilla - Posible Tsunami" (no es competencia de SENAPRED, es de SHOA). Eliminada "Alerta Roja - Emergencia química" (la atienden Bomberos/SIICH). Se mantienen: Alerta Temprana Preventiva por Sismo, Alerta Roja - Inundación súbita, Alerta Amarilla - Sistema frontal activo, Alerta Temprana Preventiva - Riesgo de aluvión, Cierre de Alerta.
+  * SHOA: agregadas "Boletín de Tsunami - Amenaza de Tsunami" y "Boletín de Tsunami - Sin Amenaza" (SHOA es quien realmente declara amenaza de tsunami en Chile). Eliminado "Aviso de Mal Tiempo Costero" (eso lo emite la Dirección Meteorológica de Chile, no SHOA).
+  * Guardia Marina: eliminado "Viento y Mar Lluvia" (no es formato oficial). Se mantienen: Aviso a la Navegación, Zona de exclusión temporal.
+  * CBV2 (Bomberos): renombradas a sistema de claves real — "Clave 1-1 — Llamado de Emergencia", "Clave 2-2 — Incendio Forestal", "Clave 3-1 — Incendio Estructural", "Clave 3-1 — Rescate Vehicular", "Clave 4 — Emergencia con Materiales Peligrosos". Mención de "Central de Alarmas".
+  * Carabineros: renombradas a "Comunicados" (no "alertas") — "Comunicado de Seguridad Pública — Patrullaje", "Comunicado — Robo con Intimidación", "Comunicado — Sospechoso Armado". Incluyen teléfono 133.
+
+- Mapa solo muestra alertas verdaderas (src/app/page.tsx):
+  * liveMapAlerts ahora filtra `a.verified !== false` — las alertas falsas/rumores (verified=false, típicamente de radio) NO aparecen en el mapa.
+  * Solo se muestran alertas verificadas (verdaderas) emitidas por fuentes oficiales.
+
+- Verificación:
+  * bun run lint → 0 errores.
+  * alerts-service reiniciado, genera alertas con los nuevos títulos: "Alerta Temprana Preventiva por Sismo", "Alerta de Incendio Forestal - COGRIG detecta focos de calor", "Marea Media", "Aviso a la Navegación", "Clave 2-2 — Incendio Forestal".
+  * curl http://localhost:3000/ → HTTP 200, HTML contiene "COEP Viña", "VeltrixIntegra", "Comuna de Viña del Mar".
+
+Stage Summary:
+- ALERTAS AHORA REFLEJAN FIELMENTE lo que cada institución realmente emite en Chile (verificado via web search de canales oficiales).
+- Alertas FALSAS eliminadas del contenido: SENAPRED ya no emite tsunami ni química (competencias de SHOA y Bomberos respectivamente), SHOA ya no emite "mal tiempo costero" (competencia de DMC), Guardia Marina ya no emite "viento y mar lluvia".
+- MAPA: solo muestra alertas VERIFICADAS (verdaderas). Las falsas/rumores NO aparecen en el mapa.
+- Títulos corregidos: CBV2 usa sistema de claves real (1-1, 2-2, 3-1, 4), Carabineros usa "Comunicados" (no "alertas").
