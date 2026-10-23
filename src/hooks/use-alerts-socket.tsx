@@ -20,6 +20,7 @@
 
 import { useEffect, useRef } from 'react';
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import { io, type Socket } from 'socket.io-client';
 
 import type { BroadcastAlert, Stats } from '@/lib/types';
@@ -134,9 +135,17 @@ export function useAlertsSocket(): {
   stats: Stats | null;
   status: ConnectionStatus;
 } {
-  const alerts = useAlertsStore((s) => s.alerts);
-  const stats = useAlertsStore((s) => s.stats);
-  const status = useAlertsStore((s) => s.status);
+  // useShallow evita re-renders innecesarios: el objeto retornado solo
+  // cambia cuando alerts/stats/status cambian de valor (no en cada render).
+  // Sin esto, zustand v5 + React 19 entra en loop "getServerSnapshot should
+  // be cached" / "Maximum update depth exceeded".
+  const { alerts, stats, status } = useAlertsStore(
+    useShallow((s) => ({
+      alerts: s.alerts,
+      stats: s.stats,
+      status: s.status,
+    })),
+  );
   const setAlerts = useAlertsStore((s) => s.setAlerts);
   const prependAlert = useAlertsStore((s) => s.prependAlert);
   const setStats = useAlertsStore((s) => s.setStats);
@@ -199,6 +208,8 @@ export function useAlertsSocket(): {
         sharedRefCount = 0;
       }
     };
+    // Dependencias vacías: el effect solo corre una vez al montar.
+    // Las funciones set* son estables (zustand las mantiene referenciadas).
   }, []);
 
   return { alerts, stats, status };
@@ -208,9 +219,13 @@ export function useAlertsSocket(): {
 // Hooks derivados para la campana de notificaciones del header.
 // ---------------------------------------------------------------------------
 
-/** Lista de las últimas 30 alertas para mostrar en el popover de la campana. */
+/** Lista de las últimas 30 alertas para mostrar en el popover de la campana.
+ *  Usa useShallow para que el selector devuelva una referencia estable cuando
+ *  el contenido del array no cambia (evita loop infinito de re-renderizado). */
 export function useRecentNotifications(limit = 30): BroadcastAlert[] {
-  return useAlertsStore((s) => s.alerts.slice(0, limit));
+  return useAlertsStore(
+    useShallow((s) => s.alerts.slice(0, limit)),
+  );
 }
 
 /** Contador de alertas no leídas (se resetea al abrir la campana). */

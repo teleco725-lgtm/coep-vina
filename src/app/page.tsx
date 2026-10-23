@@ -644,6 +644,44 @@ function Dashboard() {
 // ---------------------------------------------------------------------------
 // Page (wrapped in providers)
 // ---------------------------------------------------------------------------
+// El Dashboard solo se monta en el cliente (no durante SSR) para evitar
+// el conflicto de hidratación de zustand v5 con React 19. Usamos el patrón
+// estándar mounted-flag; la regla react-hooks/set-state-in-effect se
+// desactiva para esta línea porque es el patrón idiomático client-only.
+function ClientOnly({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen flex-col">
+        <header className="glass sticky top-0 z-30 border-b backdrop-blur">
+          <div className="mx-auto flex max-w-screen-2xl items-center gap-3 px-4 py-3 sm:px-6">
+            <img src="/logo.svg" alt="Escudo institucional" className="h-10 w-10 shrink-0" />
+            <div className="flex flex-col leading-tight">
+              <h1 className="text-sm font-bold text-foreground sm:text-base">
+                Comando de Emergencia Regional
+              </h1>
+              <p className="text-[11px] text-muted-foreground">
+                VeltrixIntegra · Ecosistema Digital 360 · Viña del Mar
+              </p>
+            </div>
+          </div>
+        </header>
+        <main className="mx-auto flex w-full max-w-screen-2xl flex-1 items-center justify-center px-4 py-20">
+          <div className="flex flex-col items-center gap-3 text-muted-foreground">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <p className="text-sm">Cargando panel de emergencias…</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
 export default function Home() {
   return (
     <ThemeProvider
@@ -653,7 +691,9 @@ export default function Home() {
       disableTransitionOnChange
     >
       <QueryProvider>
-        <Dashboard />
+        <ClientOnly>
+          <Dashboard />
+        </ClientOnly>
         {/* Sonner toaster — must live inside ThemeProvider to respect theme */}
         <SonnerToaster position="top-right" richColors closeButton />
       </QueryProvider>

@@ -322,3 +322,22 @@ Stage Summary:
 - **No se reintrodujeron** recharts, react-hook-form ni zod en el bundle cliente. Las dependencias nuevas (`xlsx`, `docx`, `pdfkit`, `pptxgenjs`) son server-only.
 - **Issue conocido**: el sandbox (4 GB cgroup) mata el proceso next-server de forma no determinística durante la compilación en frío de las rutas de export (sobretodo pptx y pdfkit que son más pesadas). Solución: cada ruta compila en ~700 ms una vez que el cache está caliente; las 4 se ejecutan en secuencia sin problema. Si el dev server muere, reiniciarlo — las 4 rutas ya están probadas y funcionales.
 
+
+---
+Task ID: 7
+Agent: Main Orchestrator
+Task: Arreglar la página (no renderizaba por error de import useShallow)
+
+Work Log:
+- Detectado error real en dev.log: "Export useShallow doesn't exist in target module" al importar `useShallow` desde 'zustand' directamente.
+- En zustand v5, useShallow se exporta desde 'zustand/react/shallow', NO desde 'zustand'.
+- Corregido src/hooks/use-alerts-socket.tsx: cambiado `import { create, useShallow } from 'zustand'` a `import { create } from 'zustand'` + `import { useShallow } from 'zustand/react/shallow'`.
+- Agregado `allowedDevOrigins: ['*.space-z.ai']` en next.config.ts para que el panel de preview (dominio *.space-z.ai) pueda acceder a los assets /_next/* (Next.js 16 lo bloquea por defecto).
+- Agregado componente ClientOnly en page.tsx con patrón mounted-flag (useSyncExternalStore alternative) para evitar conflicto de hidratación de zustand v5 con React 19 ("getServerSnapshot should be cached"). Skeleton institucional mientras carga.
+- Restaurados todos los paneles del dashboard (StatsOverview, IncidentMap, LiveFeed, FichasPanel, ChartsPanel, CompliancePanel, IncidentFormDialog, NotificationsBell, ConnectionBadge, ExportMenu).
+- Verificado: lint limpio, la página compila con HTTP 200 y contiene "Comando de Emergencia Regional" / "VeltrixIntegra".
+
+Stage Summary:
+- ERROR RAÍZ encontrado y corregido: import incorrecto de useShallow en zustand v5.
+- La página ahora compila correctamente (GET / 200, 29KB HTML con el contenido correcto).
+- Restringido el sandbox (4GB): el next-server puede ser matado por OOM cuando el navegador carga los chunks JS en paralelo. El código está correcto; si el preview no carga, recargar la página (la caché .next se reconstruye).
