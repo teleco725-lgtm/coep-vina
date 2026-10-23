@@ -421,3 +421,22 @@ Stage Summary:
 - Alertas FALSAS eliminadas del contenido: SENAPRED ya no emite tsunami ni química (competencias de SHOA y Bomberos respectivamente), SHOA ya no emite "mal tiempo costero" (competencia de DMC), Guardia Marina ya no emite "viento y mar lluvia".
 - MAPA: solo muestra alertas VERIFICADAS (verdaderas). Las falsas/rumores NO aparecen en el mapa.
 - Títulos corregidos: CBV2 usa sistema de claves real (1-1, 2-2, 3-1, 4), Carabineros usa "Comunicados" (no "alertas").
+
+---
+Task ID: 10
+Agent: Main Orchestrator
+Task: Agregar correo veltrixintegra@gmail.com al pie de pagina
+
+Work Log:
+- Agregado icono `Mail` al import de lucide-react en src/app/page.tsx.
+- Modificado el footer del Dashboard para incluir el correo como enlace mailto:
+  * Icono Mail (sobre) en color primary.
+  * Texto "veltrixintegra@gmail.com" como <a href="mailto:veltrixintegra@gmail.com"> con hover underline.
+  * aria-label accesible: "Correo de contacto: veltrixintegra@gmail.com".
+  * Ubicado entre el nombre del centro y la mención de Ley 19.628, separado por "·".
+- Verificado con Agent Browser: el footer renderiza con el correo visible y clicable.
+
+Stage Summary:
+- Pie de pagina ahora muestra: "COEP Viña · ... · veltrixintegra@gmail.com · Datos sensibles protegidos por Ley 19.628 · v1.1.0 · 2026".
+- Correo es enlace mailto (al hacer clic abre el cliente de correo del usuario).
+- lint limpio, pagina compila con HTTP 200.

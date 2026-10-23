@@ -28,6 +28,7 @@ import {
   FileSpreadsheet,
   FileText,
   Loader2,
+  Mail,
   Moon,
   Plus,
   RadioTower,
@@ -632,7 +633,7 @@ function Dashboard() {
         aria-label="Pie institucional"
       >
         <div className="mx-auto flex max-w-screen-2xl flex-col gap-2 px-4 py-3 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Shield className="h-3.5 w-3.5" />
             <span>
               COEP Viña · Centro de Operaciones de Emergencia Provincial ·
@@ -640,6 +641,15 @@ function Dashboard() {
             </span>
           </div>
           <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-3">
+            <a
+              href="mailto:veltrixintegra@gmail.com"
+              className="inline-flex items-center gap-1 font-medium text-primary transition-colors hover:underline"
+              aria-label="Correo de contacto: veltrixintegra@gmail.com"
+            >
+              <Mail className="h-3.5 w-3.5" />
+              veltrixintegra@gmail.com
+            </a>
+            <span className="hidden sm:inline">·</span>
             <span>
               Datos sensibles protegidos por{' '}
               <strong className="font-medium text-foreground">Ley 19.628</strong>
