@@ -115,8 +115,8 @@ const INCIDENTS = [
     type: "incendio_forestal",
     nature: "natural" as const,
     severity: "critical",
-    state: "activa",
-    title: "Incendio forestal quebrada de Forestal",
+    state: "cerrada",
+    title: "Incendio forestal quebrada de Forestal (histórico)",
     description:
       "Foco activo en ladera oriente del cerro, avanzando hacia sectores poblados. Viento sur-este 25 km/h.",
     lat: -33.0432,
@@ -670,14 +670,10 @@ async function main() {
     });
   }
 
-  // 2) Incidents — borramos previos (semilla) para mantener idempotencia simple.
+  // 2) Incidents — borramos TODOS los previos (semilla + pruebas manuales)
+  // para mantener la BD limpia y reflejar solo la realidad actual.
   console.log(`• Upsert ${INCIDENTS.length} incidentes...`);
-  // Sin campo único natural: usamos marca `meta.seedId` para localizar y actualizar.
-  // Para mantener idempotencia, eliminamos los incidentes sembrados anteriormente
-  // (todos cuyo meta contiene la marca `seed:true`) y los recreamos.
-  await db.incident.deleteMany({
-    where: { meta: { contains: '"seed":true' } },
-  });
+  await db.incident.deleteMany({});
   for (const inc of INCIDENTS) {
     await db.incident.create({
       data: {
