@@ -674,3 +674,53 @@ Stage Summary:
 - Los 2 incendios forestales sembrados como 'activa' ahora están 'cerrada' (históricos).
 - El seed ahora borra TODOS los incidentes (incluidos pruebas manuales) para mantener la BD limpia.
 - Los 5 incidentes activos son emergencias reales: inundación, deslizamiento, accidente, 2 delitos — coherente con el sistema frontal de octubre 2026.
+
+---
+Task ID: 16
+Agent: Main Orchestrator
+Task: Verificar páginas oficiales (SENAPRED, Chilquinta, SHOA) y ajustar alertas para que solo reflejen la realidad
+
+Work Log:
+- Investigación web de páginas oficiales:
+  * SENAPRED (senapred.cl/alertas): emitió Alerta Temprana Preventiva para Región de Valparaíso (evento meteorológico). NO menciona Viña del Mar específicamente.
+  * Chilquinta (chilquinta.cl/interrupciones): tiene interrupciones (recuperación tras sistema frontal). Posible corte en Viña.
+  * SHOA (shoa.cl/php/radioavisos.php): página con captcha (AWS WAF), no accesible automáticamente. SHOA NO siempre emite radioavisos ni alertas de marejadas. Solo emite NURNAV cuando hay evento marítimo real. Las mareas son datos tabulados normales, no alertas.
+  * Bomberos Viña: NO hay incendios activos hoy (verificado en task 15).
+
+- SHOA: eliminadas las alertas FALSAS de marea:
+  * ELIMINADO: genShoaMarea() y todo el sistema de mareas (TIDE_CYCLE, tideIndex, timer de mareas, bootstrap de marea)
+  * Las mareas (pleamar/bajamar) NO son alertas — son datos tabulados normales que SHOA publica como tablas, no como alertas de emergencia
+  * REEMPLAZADO genShoaMet() por genShoa() que solo emite:
+    - "Radioaviso NURNAV Area B Valparaíso" (watch, activa) — formato oficial del documento SHOA
+    - "Boletín de Tsunami - Sin Amenaza" (info, cerrada) — solo tras sismo, infrecuente
+  * Pool REGULAR_GENERATORS actualizado: genShoa reemplaza a genShoaMet
+  * Timer de mareas y bootstrap eliminados (SHOA no emite mareas continuas)
+
+- Charts-panel: tab "Mareas" reemplazado por tab "NURNAV":
+  * ELIMINADO: el gauge de mareas (TIDE_SEGMENTS, currentLevel, currentMarea, recentMareas)
+  * ELIMINADOS imports: Droplets, TrendingDown, Minus, formatDistanceToNow
+  * AGREGADO: tab "NURNAV" que muestra radioavisos SHOA (NURNAV Area B)
+  * Estado vacío: "Sin radioavisos NURNAV Area B activos" + explicación de que SHOA no siempre emite + enlace a shoa.cl
+  * Cuando hay radioavisos: lista con badge "SHOA · NURNAV", título, descripción, área/region
+
+- Verificación con Agent Browser (alerts-service funcionando):
+  * Estado: "Conectado"
+  * KPI Incidentes Activos: 5 (sin incendios, solo emergencias reales) ✓
+  * "marea alta/media/baja": 0 menciones ✓ (las mareas falsas se eliminaron)
+  * Alertas activas (sin mareas, sin incendios):
+    - "Comunicado — Sospechoso Armado" (Carabineros)
+    - "Aviso de Corte de Energía — Viña del Mar" (Chilquinta)
+    - "Clave 1-1 — Llamado de Emergencia" (CBV2)
+    - "Comunicado de Seguridad Pública — Patrullaje" (Carabineros)
+    - "Acuartelamiento Preventivo — Temporada de temporada" (CBV2)
+    - "Corte de Energía No Programado — Viña del Mar" (Chilquinta)
+  * "Reporte Diario CONAF — Sin incendios activos" visible ✓
+  * NURNAV-2026-XXXX (radioaviso SHOA) visible ✓
+  * lint limpio
+
+Stage Summary:
+- ALERTAS DE MAREA FALSAS ELIMINADAS: SHOA ya no emite "Marea Alta/Media/Baja" como alertas (son datos tabulados normales, no emergencias).
+- SHOA ahora solo emite Radioavisos NURNAV Area B Valparaíso (formato oficial) y Boletines de Tsunami (infrecuentes).
+- Tab "Mareas" reemplazado por tab "NURNAV" que muestra radioavisos oficiales.
+- Las alertas ahora reflejan la realidad de las páginas oficiales: SENAPRED (alerta meteorológica), Chilquinta (cortes de luz), SHOA (NURNAV, no mareas), CBV2 (sin incendios), Carabineros (comunicados).
+- KPI Incidentes Activos: 5 (inundación, deslizamiento, accidente, 2 delitos — SIN incendios).

@@ -6,9 +6,6 @@ import {
   BarChart3,
   Loader2,
   Waves,
-  Droplets,
-  TrendingDown,
-  Minus,
 } from 'lucide-react';
 
 import {
@@ -19,11 +16,12 @@ import {
 } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 
 import { useAlertsSocket } from '@/hooks/use-alerts-socket';
 import type { ApiStats, Incident } from '@/lib/types';
 import { sourceShortLabel, sourceColor } from '@/lib/severity';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNowStrict } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface ChartsPanelProps {
@@ -142,66 +140,18 @@ export function ChartsPanel({ incidents, incidentsLoading }: ChartsPanelProps) {
 
   const maxBar = barData.reduce((m, d) => Math.max(m, d.value), 0) || 1;
 
-  // ---- Mareas: SHOA alerts with category 'marea' ----
-  // The mini-service broadcasts SHOA alerts with category 'marea' and
-  // subcategory 'alta' | 'media' | 'baja'. We surface them in a dedicated
-  // tab with a horizontal gauge and a clear, readable legend.
-  const mareaAlerts = useMemo(() => {
+  // ---- Radioavisos SHOA (Sistema NURNAV Area B Valparaíso) ----
+  // SHOA no siempre emite radioavisos. Solo se muestran los NURNAV Area B
+  // que SHOA emite oficialmente (no mareas, que son datos tabulados normales).
+  const shoaAlerts = useMemo(() => {
     const seen = new Set<string>();
     return alerts.filter((a) => {
-      if (a.sourceCode !== 'shoa' || a.category !== 'marea') return false;
+      if (a.sourceCode !== 'shoa') return false;
       if (seen.has(a.id)) return false; // dedup
       seen.add(a.id);
       return true;
     });
   }, [alerts]);
-  const currentMarea = mareaAlerts[0] ?? null;
-  const recentMareas = mareaAlerts.slice(0, 5);
-
-  type TideLevel = 'baja' | 'media' | 'alta';
-  const currentLevel: TideLevel | null =
-    currentMarea?.subcategory === 'alta' ||
-    currentMarea?.subcategory === 'media' ||
-    currentMarea?.subcategory === 'baja'
-      ? (currentMarea.subcategory as TideLevel)
-      : null;
-
-  const TIDE_SEGMENTS: Array<{
-    level: TideLevel;
-    label: string;
-    short: string;
-    color: string;
-    description: string;
-    icon: typeof Droplets;
-  }> = [
-    {
-      level: 'baja',
-      label: 'Marea Baja (Bajamar)',
-      short: 'Baja',
-      color: 'oklch(0.55 0.16 240)', // azul marino
-      description:
-        'El mar está en su punto más bajo. Buen momento para revisar el litoral, embarcaciones varadas y faenas de pesca.',
-      icon: TrendingDown,
-    },
-    {
-      level: 'media',
-      label: 'Marea Media',
-      short: 'Media',
-      color: 'oklch(0.62 0.10 200)', // teal mar
-      description:
-        'El mar está en un nivel intermedio. Condiciones normales para actividades costeras, manteniendo vigilancia.',
-      icon: Minus,
-    },
-    {
-      level: 'alta',
-      label: 'Marea Alta (Pleamar)',
-      short: 'Alta',
-      color: 'oklch(0.62 0.18 35)', // naranja-rojo
-      description:
-        'El mar alcanza su nivel máximo. Vigilar zonas bajas, caletas y desembocaduras; posibilidad de oleaje fuerte.',
-      icon: Droplets,
-    },
-  ];
 
   return (
     <Card className="flex h-full flex-col gap-3 p-4">
@@ -222,9 +172,9 @@ export function ChartsPanel({ incidents, incidentsLoading }: ChartsPanelProps) {
               <BarChart3 className="h-3.5 w-3.5" />
               Tipos
             </TabsTrigger>
-            <TabsTrigger value="mareas" className="flex-1">
+            <TabsTrigger value="nurnav" className="flex-1">
               <Waves className="h-3.5 w-3.5" />
-              Mareas
+              NURNAV
             </TabsTrigger>
           </TabsList>
 
@@ -343,189 +293,73 @@ export function ChartsPanel({ incidents, incidentsLoading }: ChartsPanelProps) {
           </TabsContent>
 
           <TabsContent
-            value="mareas"
+            value="nurnav"
             className="flex min-h-[18rem] flex-col gap-3"
           >
             <p className="text-xs text-muted-foreground">
-              Estado de mareas · SHOA ·{' '}
-              <strong className="tabular-nums">{mareaAlerts.length}</strong>{' '}
-              alerta{mareaAlerts.length === 1 ? '' : 's'} reciente
-              {mareaAlerts.length === 1 ? '' : 's'}
+              Radioavisos SHOA · Sistema NURNAV Area B Valparaíso ·{' '}
+              <strong className="tabular-nums">{shoaAlerts.length}</strong>{' '}
+              aviso{shoaAlerts.length === 1 ? '' : 's'} reciente
+              {shoaAlerts.length === 1 ? '' : 's'}
             </p>
 
-            {currentLevel === null ? (
-              <div className="flex h-[16rem] items-center justify-center text-sm text-muted-foreground">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Esperando datos de SHOA…
+            {shoaAlerts.length === 0 ? (
+              <div className="flex h-[16rem] flex-col items-center justify-center gap-3 text-center">
+                <Waves className="h-10 w-10 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">
+                  Sin radioavisos NURNAV Area B activos.
+                </p>
+                <p className="max-w-xs text-[11px] text-muted-foreground">
+                  SHOA no siempre emite radioavisos. Solo se emiten cuando hay
+                  un evento marítimo real que afecta la navegación. Las mareas
+                  (pleamar/bajamar) son datos tabulados normales, no alertas.
+                </p>
+                <a
+                  href="https://www.shoa.cl/php/radioavisos.php?idioma=es"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] font-medium text-primary hover:underline"
+                >
+                  Ver radioavisos oficiales en shoa.cl →
+                </a>
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
-                {/* Horizontal gauge: 3 segments */}
-                <div>
-                  <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>Nivel actual del mar</span>
-                    <span className="font-medium text-foreground">
-                      {TIDE_SEGMENTS.find((s) => s.level === currentLevel)
-                        ?.short ?? '—'}
-                    </span>
-                  </div>
+              <div className="flex flex-col gap-2">
+                {shoaAlerts.slice(0, 5).map((a, idx) => (
                   <div
-                    className="flex h-8 w-full overflow-hidden rounded-md border"
-                    role="meter"
-                    aria-label={`Marea actual: ${
-                      TIDE_SEGMENTS.find((s) => s.level === currentLevel)?.label
-                    }`}
-                    aria-valuemin={0}
-                    aria-valuemax={2}
-                    aria-valuenow={
-                      currentLevel === 'baja'
-                        ? 0
-                        : currentLevel === 'media'
-                        ? 1
-                        : 2
-                    }
+                    key={`nurnav-${idx}-${a.id}`}
+                    className="rounded-md border-l-4 border-l-primary bg-card/95 px-3 py-2 text-xs"
                   >
-                    {TIDE_SEGMENTS.map((seg) => {
-                      const isActive = seg.level === currentLevel;
-                      const Icon = seg.icon;
-                      return (
-                        <div
-                          key={seg.level}
-                          className="flex flex-1 items-center justify-center gap-1.5 transition-all"
-                          style={{
-                            backgroundColor: isActive
-                              ? seg.color
-                              : 'var(--muted)',
-                            color: isActive
-                              ? 'white'
-                              : 'var(--muted-foreground)',
-                            opacity: isActive ? 1 : 0.45,
-                          }}
-                        >
-                          <Icon className="h-3.5 w-3.5" />
-                          <span className="text-[11px] font-semibold sm:text-xs">
-                            {seg.short}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <Badge
+                        variant="secondary"
+                        className="gap-1 text-[10px]"
+                        style={{ color: 'var(--chart-2)' }}
+                      >
+                        <Waves className="h-3 w-3" />
+                        SHOA · NURNAV
+                      </Badge>
+                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                        {formatDistanceToNowStrict(new Date(a.issuedAt), {
+                          addSuffix: true,
+                          locale: es,
+                        })}
+                      </span>
+                    </div>
+                    <p className="font-medium leading-snug text-foreground">
+                      {a.title}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {a.description}
+                    </p>
+                    {a.meta && typeof a.meta === 'object' && 'area' in a.meta && (
+                      <p className="mt-1 text-[10px] font-medium text-primary">
+                        Sistema NURNAV Area {String(a.meta.area)} ·{' '}
+                        {String(a.meta.region ?? 'Valparaíso')}
+                      </p>
+                    )}
                   </div>
-                  {currentMarea && (
-                    <p className="mt-1.5 text-[11px] text-muted-foreground">
-                      Última lectura{' '}
-                      {formatDistanceToNow(new Date(currentMarea.issuedAt), {
-                        addSuffix: true,
-                        locale: es,
-                      })}
-                      {currentMarea.title ? ` · ${currentMarea.title}` : ''}
-                    </p>
-                  )}
-                </div>
-
-                {/* Current level description */}
-                <div
-                  className="rounded-md border p-2.5"
-                  style={{
-                    backgroundColor: 'var(--muted)',
-                    borderColor: 'var(--border)',
-                  }}
-                >
-                  <p className="text-xs text-foreground">
-                    {
-                      TIDE_SEGMENTS.find((s) => s.level === currentLevel)
-                        ?.description
-                    }
-                  </p>
-                </div>
-
-                {/* LEGEND — placed BELOW the gauge, text >= 12px */}
-                <div>
-                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Leyenda
-                  </p>
-                  <ul className="flex flex-col gap-1.5">
-                    {TIDE_SEGMENTS.map((seg) => {
-                      const Icon = seg.icon;
-                      const isActive = seg.level === currentLevel;
-                      return (
-                        <li
-                          key={seg.level}
-                          className="flex items-center gap-2 rounded-sm border p-1.5"
-                          style={{
-                            borderColor: isActive
-                              ? seg.color
-                              : 'var(--border)',
-                            backgroundColor: isActive
-                              ? 'var(--accent)'
-                              : 'transparent',
-                          }}
-                        >
-                          <span
-                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm"
-                            style={{ backgroundColor: seg.color }}
-                            aria-hidden
-                          >
-                            <Icon className="h-3 w-3 text-white" />
-                          </span>
-                          <span className="text-sm font-medium text-foreground">
-                            {seg.label}
-                          </span>
-                          {isActive && (
-                            <span
-                              className="ml-auto rounded-sm px-1.5 py-0.5 text-[10px] font-bold text-white"
-                              style={{ backgroundColor: seg.color }}
-                            >
-                              ACTUAL
-                            </span>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-
-                {/* Last 5 marea alerts */}
-                <div>
-                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    Últimas 5 lecturas
-                  </p>
-                  {recentMareas.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      Sin lecturas recientes.
-                    </p>
-                  ) : (
-                    <ul className="flex flex-col gap-1">
-                      {recentMareas.map((a, idx) => {
-                        const seg = TIDE_SEGMENTS.find(
-                          (s) => s.level === a.subcategory,
-                        );
-                        return (
-                          <li
-                            key={`marea-${idx}-${a.id}`}
-                            className="flex items-center gap-2 text-xs"
-                          >
-                            <span
-                              className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
-                              style={{
-                                backgroundColor: seg?.color ?? 'var(--muted)',
-                              }}
-                              aria-hidden
-                            />
-                            <span className="font-medium text-foreground">
-                              {seg?.short ?? a.subcategory ?? '—'}
-                            </span>
-                            <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
-                              {formatDistanceToNow(new Date(a.issuedAt), {
-                                addSuffix: true,
-                                locale: es,
-                              })}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
+                ))}
               </div>
             )}
           </TabsContent>

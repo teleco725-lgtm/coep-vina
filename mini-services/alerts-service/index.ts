@@ -364,111 +364,66 @@ function genConaf(criticalOnly: boolean = false): BroadcastAlert {
   }
 }
 
-// Tide cycle simulator (SHOA)
-// Cycle: alta -> media (descendente) -> baja -> media (ascendente) -> alta ...
-// Realistic Chilean Pacific coast tides are semi-diurnal (~12h25m); we accelerate
-// the cadence for the simulation so the dashboard can visualise the cycle.
-const TIDE_CYCLE: Array<'alta' | 'media' | 'baja'> = ['alta', 'media', 'baja', 'media']
-let tideIndex = 0
-
-function genShoaMarea(): BroadcastAlert {
-  const phase = TIDE_CYCLE[tideIndex % TIDE_CYCLE.length]
-  tideIndex = (tideIndex + 1) % TIDE_CYCLE.length
-
-  // Coastal coords near Viña del Mar / Valparaíso shoreline
+// ---------------------------------------------------------------------------
+// SHOA — Servicio Hidrográfico y Oceanográfico de la Armada
+// ---------------------------------------------------------------------------
+// IMPORTANTE: SHOA NO siempre emite radioavisos ni alertas de marejadas. SHOA
+// solo emite un Radioaviso NURNAV cuando hay un evento marítimo real que
+// afecta la navegación. El sistema usa el formato "Sistema NURNAV Area B
+// Valparaíso" (no otro). Las mareas (pleamar/bajamar) son datos tabulados
+// normales, NO alertas — no se emiten como alertas de emergencia.
+//
+// Por lo tanto, el generador de SHOA solo emite:
+//   - Radioaviso NURNAV Area B Valparaíso (cuando hay un evento real)
+//   - Boletín de Tsunami (solo tras un sismo relevante, que es infrecuente)
+// NO se emiten "mareas" como alertas (son datos normales tabulados).
+// ---------------------------------------------------------------------------
+function genShoa(): BroadcastAlert {
   const coord = {
     lat: round(rand(-33.03, -33.02), 4),
     lng: round(rand(-71.58, -71.54), 4),
   }
-  const titles: Record<string, string> = {
-    alta: 'Marea Alta (Pleamar)',
-    media: 'Marea Media',
-    baja: 'Marea Baja (Bajamar)',
-  }
-  const descs: Record<string, string> = {
-    alta:
-      'SHOA reporta pleamar en el litoral de Viña del Mar. Nivel del mar alcanza máximo predictivo. Restringir faenas portuarias menores en zonas sensibles.',
-    media:
-      'SHOA reporta marea media. Transición estable entre pleamar y bajamar. Condiciones normales de navegación.',
-    baja:
-      'SHOA reporta bajamar en el litoral de Viña del Mar. Nivel del mar alcanza mínimo predictivo. Considerar calado para embarcaciones menores.',
-  }
-  const heights: Record<string, number> = {
-    alta: rand(1.5, 2.0),
-    media: rand(0.7, 1.2),
-    baja: rand(0.2, 0.6),
-  }
-  return {
-    id: uuidv4(),
-    externalId: makeExternalId('SHOA-MAREA'),
-    sourceCode: 'shoa',
-    sourceName: SOURCE_NAMES.shoa,
-    category: 'marea',
-    subcategory: phase,
-    severity: 'info',
-    state: 'activa',
-    title: titles[phase],
-    description: descs[phase],
-    location: 'Litoral de Viña del Mar',
-    lat: coord.lat,
-    lng: coord.lng,
-    region: 'Valparaíso',
-    commune: 'Viña del Mar',
-    meta: {
-      altura_m: heights[phase].toFixed(2),
-      fase: phase,
-      ciclo: 'semidiurno',
-      hora_referencia_utc: new Date().toISOString(),
-      canal: SOURCE_CHANNELS.shoa,
-    },
-    issuedAt: new Date().toISOString(),
-  }
-}
-
-function genShoaMet(): BroadcastAlert {
-  const coord = randCoord()
   type Variant = {
     title: string
     description: string
     severity: Severity
+    state: State
     meta?: Record<string, unknown> | null
   }
   const variants: Variant[] = [
     {
-      title: 'Boletín Meteorológico Marítimo',
+      title: 'Radioaviso NURNAV Area B Valparaíso',
       description:
-        'SHOA emite boletín meteorológico marítimo. Viento del suroeste 20-30 nudos, mar de fondo 2.5 m. Condiciones adversas para embarcaciones menores.',
+        'SHOA emite Radioaviso del Sistema NURNAV Area B Valparaíso: aviso a la navegación por condiciones marítimas en el litoral de la Región de Valparaíso. Consultar documento oficial en shoa.cl/php/radioavisos.php',
       severity: 'watch',
-      meta: { viento_nudos: randInt(20, 35), mar_fondo_m: rand(2, 3.5).toFixed(1) },
+      state: 'activa',
+      meta: {
+        sistema: 'NURNAV',
+        area: 'B',
+        region: 'Valparaíso',
+        documento_oficial: 'https://www.shoa.cl/php/radioavisos.php?idioma=es',
+      },
     },
-    // SHOA es el organismo oficial en Chile que declara AMENAZA DE TSUNAMI
-    // (no SENAPRED). Tras un sismo de magnitud relevante, SHOA evalúa y emite
-    // el boletín de tsunami con el estado de amenaza.
-    {
-      title: 'Boletín de Tsunami - Amenaza de Tsunami',
-      description:
-        'SHOA emite boletín de tsunami: se declara estado de Amenaza de Tsunami para el litoral de la Región de Valparaíso tras sismo de magnitud relevante. Población costera debe alejarse del litoral y seguir instrucciones de Autoridad Marítima.',
-      severity: 'warning',
-      meta: { estado: 'amenaza', fuente_evaluadora: 'SHOA', canal: '16 VHF' },
-    },
+    // Boletín de tsunami SOLO tras sismo relevante (infrecuente)
     {
       title: 'Boletín de Tsunami - Sin Amenaza',
       description:
         'SHOA emite boletín de tsunami: se descarta amenaza de tsunami para las costas de la Región de Valparaíso tras análisis del evento sísmico. Operaciones marítimas retoman normalidad.',
       severity: 'info',
+      state: 'cerrada',
       meta: { estado: 'sin_amenaza', fuente_evaluadora: 'SHOA' },
     },
   ]
   const v = pick(variants)
   return {
     id: uuidv4(),
-    externalId: makeExternalId('SHOA-MET'),
+    externalId: makeExternalId('SHOA-NURNAV'),
     sourceCode: 'shoa',
     sourceName: SOURCE_NAMES.shoa,
     category: 'meteorologica',
     subcategory: null,
     severity: v.severity,
-    state: 'activa',
+    state: v.state,
     title: v.title,
     description: v.description,
     location: 'Litoral de Valparaíso',
@@ -705,7 +660,7 @@ function genCarabineros(criticalOnly: boolean = false): BroadcastAlert {
 const REGULAR_GENERATORS: Array<() => BroadcastAlert> = [
   genSenapred,
   genConaf,
-  genShoaMet,
+  genShoa,
   genCbv2,
   genCarabineros,
   genChilquinta,
@@ -835,7 +790,6 @@ function emitAlert(alert: BroadcastAlert): void {
 // Timers
 // ============================================================================
 let alertTimer: ReturnType<typeof setTimeout> | null = null
-let tideTimer: ReturnType<typeof setTimeout> | null = null
 let statsTimer: ReturnType<typeof setInterval> | null = null
 
 function scheduleNextAlert(): void {
@@ -846,14 +800,11 @@ function scheduleNextAlert(): void {
   }, delayMs)
 }
 
-function scheduleNextTide(): void {
-  // Tide cycle fires every 25-45s, cycling alta -> media -> baja -> media ...
-  const delayMs = rand(25000, 45000)
-  tideTimer = setTimeout(() => {
-    emitAlert(withVerification(genShoaMarea()))
-    scheduleNextTide()
-  }, delayMs)
-}
+// NOTA: El timer de mareas (scheduleNextTide) se eliminó. SHOA NO siempre
+// emite alertas de marejadas — las mareas son datos tabulados normales, no
+// alertas de emergencia. SHOA solo emite Radioavisos NURNAV cuando hay un
+// evento marítimo real, lo cual es infrecuente. El generador genShoa() en
+// el pool REGULAR_GENERATORS se encarga de emitir esos radioavisos.
 
 function scheduleStats(): void {
   statsTimer = setInterval(() => {
@@ -888,11 +839,8 @@ httpServer.listen(PORT, () => {
   for (let i = 0; i < 20; i++) {
     pushAlert(generateAlert())
   }
-  // Force the first marea alert to be "alta" so the cycle starts cleanly.
-  pushAlert(withVerification(genShoaMarea()))
 
   scheduleNextAlert()
-  scheduleNextTide()
   scheduleStats()
 
   console.log('[alerts-service] bootstrapped. Awaiting client connections...')
@@ -908,7 +856,6 @@ function shutdown(signal: string): void {
   console.log(`[alerts-service] received ${signal}, shutting down gracefully...`)
 
   if (alertTimer) clearTimeout(alertTimer)
-  if (tideTimer) clearTimeout(tideTimer)
   if (statsTimer) clearInterval(statsTimer)
 
   // Close all open connections first, then the HTTP server.
