@@ -598,3 +598,40 @@ Stage Summary:
 - LiveFeed y mapa solo muestran alertas vigentes — los pines obsoletos se eliminan automáticamente.
 - Alertas falsas de incendio ya no aparecen (eliminadas en task anterior).
 - Si el dashboard dice "Conectando" y no hay alertas, recargar la página (el alerts-service bun --hot se cuelga periódicamente en el sandbox de 4GB).
+
+---
+Task ID: 14
+Agent: Main Orchestrator
+Task: Implementar filtro anti-falso positivo por estado del evento (terminado/controlado/balance/informativo) del algoritmo del usuario y corregir contador de incidentes activos
+
+Work Log:
+- Agregado Filtro 3 "Anti-Falso Positivo por Estado del evento" en src/lib/pipeline-ttl.ts:
+  * Lista PALABRAS_CERRADO: terminado, controlado, balance, informativo, cierre, cerrada, cerrado, descartado, sin novedad, superada, finalizado, extinto, extinguido
+  * Función esEventoCerrado(): revisa título + descripción en busca de estas palabras
+  * Integrado en depurarAlerta() como Filtro 2.5 (antes del TTL): descarta eventos cerrados/informativos con motivo "Evento cerrado/informativo (terminado, controlado, balance, cierre). No es una emergencia viva."
+- Corregido el contador de "Incidentes Activos" en stats-overview.tsx:
+  * ANTES: incidents.filter(i => i.state !== 'cerrada') → contaba 'contenida' y 'controlada' como activos (11 incidentes)
+  * AHORA: incidents.filter(i => i.state === 'activa') → solo cuenta emergencias vivas reales (7 incidentes)
+  * Sublabel actualizado: 'estado "activa" de 16 registrados'
+- Corregido el contador de "Alertas Activas" en stats-overview.tsx:
+  * ANTES: stats.byState.activa + stats.byState.en_proceso (contaba estados procesados como activos)
+  * AHORA: filtrarAlertasVigentes(alerts).length (solo alertas dentro del TTL y no cerradas)
+  * Sublabel actualizado: 'vigentes de X en buffer WS'
+- Unificada la llamada al hook useAlertsSocket() (una sola vez por componente)
+
+- Verificación con Agent Browser (alerts-service funcionando):
+  * Estado: "Conectado"
+  * KPI Alertas Activas: 20 (vigentes de 20 en buffer WS) — solo las que pasan el pipeline TTL
+  * KPI Incidentes Activos: 7 (estado "activa" de 16 registrados) — ya no cuenta incendios terminados como activos
+  * KPI Fichas Críticas: 5
+  * KPI Fuentes: 7
+  * Pipeline: "Conectado · 20 vigentes / 0 rechazadas · Viña del Mar"
+  * "Cierre de Alerta" NO aparece (filtrada por palabra "cierre")
+  * 0 incendios forestales/estructurales descontrolados o en progreso
+  * lint limpio
+
+Stage Summary:
+- FILTRO ANTI-FALSO POSITIVO implementado: eventos con "terminado", "controlado", "balance", "informativo", "cierre", "sin novedad", etc. se descartan automáticamente del mapa y feed.
+- CONTADOR DE INCENDIOS CORREGIDO: "Incidentes Activos" ahora muestra 7 (solo estado 'activa'), no 11 (que incluía eventos ya resueltos con estado 'contenida'/'controlada').
+- CONTADOR DE ALERTAS CORREGIDO: "Alertas Activas" ahora muestra solo las vigentes (dentro del TTL y no cerradas), no el total del buffer.
+- Los números del dashboard ahora son REALES: solo emergencias vivas, no datos obsoletos ni eventos cerrados.

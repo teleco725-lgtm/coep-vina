@@ -61,6 +61,37 @@ export function esFuenteBoletin(sourceCode: SourceCode | string): boolean {
   return FUENTES_BOLETINES.has(sourceCode);
 }
 
+// ---------------------------------------------------------------------------
+// Filtro 3: Anti-Falso Positivo por Estado del evento
+// ---------------------------------------------------------------------------
+// Palabras clave que indican que el evento está CERRADO o es informativo
+// (no una emergencia viva). Estas alertas se descartan del mapa activo.
+const PALABRAS_CERRADO = [
+  'terminado',
+  'controlado',
+  'balance',
+  'informativo',
+  'cierre',
+  'cerrada',
+  'cerrado',
+  'descartado',
+  'sin novedad',
+  'superada',
+  'finalizado',
+  'extinto',
+  'extinguido',
+];
+
+/**
+ * Determina si una alerta es un "evento cerrado" (falso positivo para el
+ * mapa activo). Revisa el título y la descripción en busca de palabras
+ * clave como "terminado", "controlado", "balance", "informativo".
+ */
+export function esEventoCerrado(alert: BroadcastAlert): boolean {
+  const texto = `${alert.title ?? ''} ${alert.description ?? ''}`.toLowerCase();
+  return PALABRAS_CERRADO.some((palabra) => texto.includes(palabra));
+}
+
 /**
  * Calcula el TTL aplicable según la fuente.
  */
@@ -101,6 +132,22 @@ export function depurarAlerta(
       decision: 'rechazado',
       motivo:
         'Rechazado: Boletín antiguo. Datos históricos de días anteriores.',
+      ttlAplicado,
+      edadMs,
+      mismoDia,
+    };
+  }
+
+  // Filtro 2.5: Anti-Falso Positivo por Estado del evento
+  // Descarta eventos cerrados/informativos: "terminado", "controlado",
+  // "balance", "informativo", "cierre", "sin novedad", etc. Estos no son
+  // emergencias vivas y NO deben pintarse en el mapa activo.
+  if (esEventoCerrado(alert)) {
+    return {
+      alert,
+      decision: 'rechazado',
+      motivo:
+        'Rechazado: Evento cerrado/informativo (terminado, controlado, balance, cierre). No es una emergencia viva.',
       ttlAplicado,
       edadMs,
       mismoDia,
