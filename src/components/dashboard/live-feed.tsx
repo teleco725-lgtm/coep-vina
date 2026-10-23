@@ -15,6 +15,7 @@ import { useAlertsSocket } from '@/hooks/use-alerts-socket';
 import { AlertCard } from '@/components/dashboard/alert-card';
 import type { SourceCode } from '@/lib/types';
 import { sourceShortLabel, sourceColor } from '@/lib/severity';
+import { filtrarAlertasVigentes } from '@/lib/pipeline-ttl';
 
 type FilterCode = 'all' | SourceCode;
 
@@ -37,7 +38,9 @@ export function LiveFeed() {
   const [onlyVerified, setOnlyVerified] = useState(true);
 
   const filtered = useMemo(() => {
-    let out = alerts;
+    // Pipeline TTL: solo alertas dentro del umbral temporal (4h emergencias,
+    // 12h boletines) y mismo día. Esto elimina pines obsoletos automáticamente.
+    let out = filtrarAlertasVigentes(alerts);
     if (onlyVerified) {
       out = out.filter((a) => a.verified !== false);
     }

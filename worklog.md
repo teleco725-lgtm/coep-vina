@@ -550,3 +550,51 @@ Stage Summary:
 - CBV2 ahora emite: reporte sin emergencias activas, acuartelamiento preventivo, llamado general Clave 1-1 (motivo en evaluación), rescate vehicular, materiales peligrosos.
 - Hook de socket más robusto: polling fallback, forceNew, sincronización de estado cada 2s, reconexión forzada a los 8s.
 - NOTA: el alerts-service (bun --hot) se cuelga periódicamente en el sandbox de 4GB. Si el dashboard dice "Conectando" y no aparecen alertas, recargar la página (el alerts-service se reinicia).
+
+---
+Task ID: 13
+Agent: Main Orchestrator
+Task: Implementar pipeline de depuración TTL del usuario (4h emergencias, 12h boletines, filtro territorial Viña del Mar) para eliminar pines falsos/obsoletos
+
+Work Log:
+- Creada utilidad src/lib/pipeline-ttl.ts con el algoritmo del usuario:
+  * TTL_EMERGENCIAS_CRITICAS = 4 horas (Bomberos/Carabineros/Scanner)
+  * TTL_BOLETINES_ALERTAS = 12 horas (SENAPRED/SHOA/SEC/Chilquinta/CONAF)
+  * COMUNA_RESTRICCION = "Viña del Mar"
+  * Función depurarAlerta(): aplica 3 filtros (territorial, mismo día, TTL) y devuelve decisión + motivo
+  * Función filtrarAlertasVigentes(): filtra un array dejando solo las vigentes
+  * formatearEdad() y formatearTTL() para UI
+- Creado componente src/components/dashboard/pipeline-depuracion.tsx:
+  * Panel "Pipeline de Depuración" que muestra el log de decisiones en tiempo real
+  * Cada alerta muestra: badge fuente, estado (Vigente/Descartado), edad, comuna, TTL aplicado
+  * Aprobados: borde verde, "✓ Validado para el mapa activo"
+  * Rechazados: borde rojo, motivo del descarte (territorio, TTL emergencia, TTL boletín, día anterior)
+  * Toggle "Ver vigentes" / "Ver rechazados"
+  * Contador: X vigentes / Y rechazadas
+  * Badges de umbrales: Emergencias 4h, Boletines 12h, Solo Viña del Mar
+- Integrado el filtro TTL en el LiveFeed (live-feed.tsx):
+  * filtered ahora aplica filtrarAlertasVigentes() antes del filtro de fuente y verificación
+  * Solo muestra alertas dentro del TTL (pines obsoletos se eliminan automáticamente)
+- Integrado el filtro TTL en el mapa (page.tsx liveMapAlerts):
+  * liveMapAlerts ahora filtra con filtrarAlertasVigentes() antes del dedup y slice
+  * El mapa solo pinta pines vigentes (dentro de TTL y mismo día)
+- Integrado el componente PipelineDepuracion en el dashboard (page.tsx):
+  * Nueva fila "Row 2.5" entre el Map+Feed y las Fichas+Charts
+  * Muestra el pipeline de depuración completo con transparencia de decisiones
+
+- Verificación con Agent Browser (alerts-service funcionando):
+  * Estado: "Conectado", 20 vigentes / 0 rechazadas
+  * Pipeline visible: "Pipeline de Depuración · Conectado · 20 vigentes / 0 rechazadas · Viña del Mar"
+  * Umbrales visibles: "Emergencias: 4h · Boletines: 12h · Solo: Viña del Mar"
+  * Cada alerta muestra badge "Vigente", edad "<1m", TTL aplicado (4h o 12h), "✓ Validado para el mapa activo"
+  * Alertas vigentes: Marea Baja/Alta (SHOA TTL 12h), Clave 1-1 Llamado (CBV2 TTL 4h), Acuartelamiento Preventivo (CBV2 TTL 4h), Comunicado Robo (Carabineros TTL 4h), Boletín de Tsunami (SHOA TTL 12h)
+  * NO hay alertas de incendio forestal/estructural (eran falsas, eliminadas en task 12)
+  * lint limpio
+
+Stage Summary:
+- PIPELINE TTL IMPLEMENTADO: el algoritmo del usuario está ahora en producción.
+- 3 filtros automáticos: (1) territorial solo Viña del Mar, (2) mismo día, (3) TTL 4h emergencias / 12h boletines.
+- Panel "Pipeline de Depuración" muestra transparencia total: cada alerta con su decisión (Vigente/Descartado) y motivo.
+- LiveFeed y mapa solo muestran alertas vigentes — los pines obsoletos se eliminan automáticamente.
+- Alertas falsas de incendio ya no aparecen (eliminadas en task anterior).
+- Si el dashboard dice "Conectando" y no hay alertas, recargar la página (el alerts-service bun --hot se cuelga periódicamente en el sandbox de 4GB).

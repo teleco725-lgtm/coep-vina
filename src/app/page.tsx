@@ -61,12 +61,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { StatsOverview } from '@/components/dashboard/stats-overview';
 import { LiveFeed } from '@/components/dashboard/live-feed';
+import { PipelineDepuracion } from '@/components/dashboard/pipeline-depuracion';
 import { ChartsPanel } from '@/components/dashboard/charts-panel';
 import { FichasPanel } from '@/components/dashboard/fichas-panel';
 import { CompliancePanel } from '@/components/dashboard/compliance-panel';
 import { IncidentFormDialog } from '@/components/dashboard/incident-form';
 
 import { useAlertsSocket, useRecentNotifications, useUnreadCount, useMarkAllRead } from '@/hooks/use-alerts-socket';
+import { filtrarAlertasVigentes } from '@/lib/pipeline-ttl';
 import type { Incident } from '@/lib/types';
 import {
   severityColor,
@@ -478,12 +480,13 @@ function Dashboard() {
   });
 
   // Live alerts overlay for the map: ONLY verified (true) alerts with valid
-  // coords, newest 10. Las alertas falsas (rumores, verified=false) NO se
-  // muestran en el mapa para evitar confundir al operador con reportes no
-  // confirmados por una fuente oficial.
+  // coords, dentro del TTL (4h emergencias / 12h boletines), mismo día, y
+  // comuna Viña del Mar. Las alertas falsas/obsoletas NO se muestran en el
+  // mapa — el pipeline TTL las descarta automáticamente.
   const liveMapAlerts = useMemo(() => {
+    const vigentes = filtrarAlertasVigentes(alerts);
     const seen = new Set<string>();
-    return alerts
+    return vigentes
       .filter((a) => {
         if (a.verified === false) return false; // <-- SOLO verdaderas
         if (typeof a.lat !== 'number' || typeof a.lng !== 'number') return false;
@@ -599,6 +602,9 @@ function Dashboard() {
               <LiveFeed />
             </div>
           </div>
+
+          {/* Row 2.5: Pipeline de Depuración (filtrado TTL automático) */}
+          <PipelineDepuracion />
 
           {/* Row 3: Fichas + Charts */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-6">
