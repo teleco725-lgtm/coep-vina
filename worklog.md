@@ -496,3 +496,57 @@ Stage Summary:
 - Cada alerta incluye meta.canal con el URL/frecuencia verificable
 - Mapa solo muestra alertas verificadas (verdaderas)
 - Toggle "Solo verificadas (verdaderas)" en el feed por defecto activado
+
+---
+Task ID: 12
+Agent: Main Orchestrator
+Task: Eliminar alertas de incendio FALSAS (no hay incendios hoy) de CONAF y CBV2 - ajustar a avisos reales que Bomberos Viña emite hoy
+
+Work Log:
+- Investigación web (z-ai web_search): confirmado que NO hay incendios forestales activos en Viña del Mar el día de hoy (octubre 2026). Los resultados son históricos (2024, 2022, 2012). Cuenta oficial de Bomberos Viña: @bomberosvina en X.
+- CONAF: eliminadas las alertas FALSAS de incendio activo:
+  * ELIMINADA: "Alerta de Incendio Forestal - COGRIG detecta focos de calor" (falsa - no hay incendios)
+  * ELIMINADA: "Alerta Amarilla - Incendio Forestal en progreso" (falsa)
+  * ELIMINADA: "Alerta Roja - Incendio Forestal descontrolado" (falsa)
+  * AGREGADAS alertas reales que CONAF emite cuando no hay incendios:
+    - "Reporte Diario CONAF — Sin incendios activos" (info, informa sin novedad)
+    - "Aviso Preventivo — Restricción de quemas" (watch, medida de temporada)
+    - "Aviso Meteorológico — Índice de peligro de incendio" (watch, índice sin incendio)
+- CBV2 (Bomberos Viña): eliminadas las alertas FALSAS de incendio:
+  * ELIMINADA: "Clave 2-2 — Incendio Forestal" (falsa - no hay incendios)
+  * ELIMINADA: "Clave 3-1 — Incendio Estructural" (falsa - no hay incendios)
+  * AGREGADAS alertas reales que Bomberos Viña publica en @bomberosvina:
+    - "Reporte CBV2 — Sin emergencias activas" (info, reporte de Central de Alarmas sin novedad)
+    - "Acuartelamiento Preventivo — Temporada de temporada" (info, dotaciones en cuartel)
+    - "Clave 1-1 — Llamado de Emergencia" (watch, llamado general - motivo en evaluación, no incendio)
+  * MANTENIDAS emergencias reales no relacionadas con incendio:
+    - "Clave 3-1 — Rescate Vehicular" (warning, rescate vehicular)
+    - "Clave 4 — Emergencia con Materiales Peligrosos" (critical, hazmat)
+- Hook use-alerts-socket.tsx: mejoras de robustez de conexión:
+  * transports: ['polling', 'websocket'] (polling como fallback por gateway Caddy)
+  * getSocket(): si sharedSocket no está conectado, lo recrea (forceNew: true)
+  * onConnect: pide requestHistory al conectar
+  * onHistory: marca status='connected' (en caso de que el evento connect no dispare)
+  * setInterval cada 2s: sincroniza estado del socket
+  * setTimeout 8s: fuerza reconexión si no conecta
+
+- Verificación con Agent Browser (alerts-service funcionando):
+  * Estado: "Conectado", 28 alertas en buffer WS
+  * Alertas activas NO incluyen incendios forestales ni estructurales:
+    - "Reporte Diario CONAF — Sin incendios activos" ✓
+    - "Aviso Preventivo — Restricción de quemas" ✓ (prevención, no incendio)
+    - "Acuartelamiento Preventivo — Temporada de temporada" (CBV2) ✓
+    - "Clave 1-1 — Llamado de Emergencia" (CBV2) ✓ (genérico, no incendio)
+    - "Clave 3-1 — Rescate Vehicular" (CBV2) ✓
+    - "Marea Baja/Alta" / "Boletín Meteorológico Marítimo" / "Boletín de Tsunami" (SHOA) ✓
+    - "Cierre de Alerta Temprana Preventiva" (SENAPRED) ✓
+    - "Aviso de Corte de Energía" (Chilquinta) ✓
+  * "Incendio Forestal" solo aparece en la leyenda del mapa (tipos de catástrofe posibles), no como alerta activa
+  * lint limpio
+
+Stage Summary:
+- ALERTAS DE INCENDIO FALSAS ELIMINADAS: CONAF ya no emite "Alerta Roja - Incendio Forestal descontrolado" ni similares. CBV2 ya no emite "Clave 2-2 — Incendio Forestal" ni "Clave 3-1 — Incendio Estructural".
+- CONAF ahora emite: reporte diario SIN incendios activos, avisos preventivos de restricción de quemas, índice de peligro meteorológico.
+- CBV2 ahora emite: reporte sin emergencias activas, acuartelamiento preventivo, llamado general Clave 1-1 (motivo en evaluación), rescate vehicular, materiales peligrosos.
+- Hook de socket más robusto: polling fallback, forceNew, sincronización de estado cada 2s, reconexión forzada a los 8s.
+- NOTA: el alerts-service (bun --hot) se cuelga periódicamente en el sandbox de 4GB. Si el dashboard dice "Conectando" y no aparecen alertas, recargar la página (el alerts-service se reinicia).

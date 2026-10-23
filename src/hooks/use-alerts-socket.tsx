@@ -138,16 +138,29 @@ let sharedSocket: Socket | null = null;
 let sharedRefCount = 0;
 
 function getSocket(): Socket {
-  if (sharedSocket) return sharedSocket;
-  // IMPORTANTE: la conexión debe ir al path '/' y llevar XTransformPort
-  // en la query string para que el gateway Caddy lo reenvíe al puerto 3003.
+  // Si ya existe un sharedSocket Y está conectado, lo reutilizamos.
+  // Si existe pero NO está conectado (estado roto por HMR o gateway),
+  // lo desconectamos y creamos uno nuevo.
+  if (sharedSocket) {
+    if (sharedSocket.connected) return sharedSocket;
+    try {
+      sharedSocket.disconnect();
+    } catch {
+      /* ignore */
+    }
+    sharedSocket = null;
+  }
   sharedSocket = io('/', {
-    transports: ['websocket'],
+    // Polling como fallback: el gateway Caddy a veces no maneja bien el
+    // upgrade a WebSocket. Socket.io hace upgrade automático cuando es posible.
+    transports: ['polling', 'websocket'],
     query: { XTransformPort: '3003' },
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1500,
     reconnectionDelayMax: 10000,
+    // Forzar reconexión inmediata si el socket se desconecta.
+    forceNew: true,
   });
   return sharedSocket;
 }
@@ -183,9 +196,17 @@ export function useAlertsSocket(): {
     sharedRefCount += 1;
     setStatus(socket.connected ? 'connected' : 'connecting');
 
-    const onConnect = () => setStatus('connected');
+    const onConnect = () => {
+      setStatus('connected');
+      // Pedir el historial al conectar (o reconectar) para que el cliente
+      // tenga los datos más recientes incluso si el ClientOnly monta tarde.
+      socket.emit('requestHistory');
+    };
     const onDisconnect = () => setStatus('disconnected');
     const onHistory = (data: BroadcastAlert[]) => {
+      // Si recibimos el history, estamos conectados (incluso si el evento
+      // 'connect' no se disparó por problemas con el gateway Caddy).
+      setStatus('connected');
       if (Array.isArray(data)) {
         setAlerts(data);
       }
@@ -215,15 +236,35 @@ export function useAlertsSocket(): {
     socket.on('stats', onStats);
 
     // Si el socket ya estaba conectado al montar (sharedSocket reutilizado),
-    // forzamos el estado y pedimos el historial explícitamente para no perderlo.
+    // forzamos el estado y pedimos el historial explícitamente.
     if (socket.connected) {
       setStatus('connected');
       socket.emit('requestHistory');
     }
-    // Re-pedir historial en cada reconexión para no perder alertas.
-    socket.on('connect', () => socket.emit('requestHistory'));
+
+    // Safety net: poll del estado del socket cada 2s. Si el socket se
+    // conecta después de que el hook se montó (ClientOnly retrasa el
+    // montaje), el evento 'connect' puede haber pasado antes de registrar
+    // el listener. Este polling asegura que el estado se sincronice.
+    const statusInterval = setInterval(() => {
+      if (socket.connected) {
+        setStatus('connected');
+        socket.emit('requestHistory');
+      }
+    }, 2000);
+
+    // Safety net: si el socket no conecta en 8 segundos, forzar reconexión.
+    // El gateway Caddy a veces no reenvía el handshake correctamente y el
+    // socket se queda en estado "connecting" perpetuo.
+    const connectTimeout = setTimeout(() => {
+      if (!socket.connected) {
+        socket.connect();
+      }
+    }, 8000);
 
     return () => {
+      clearTimeout(connectTimeout);
+      clearInterval(statusInterval);
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
       socket.off('history', onHistory);

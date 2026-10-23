@@ -302,30 +302,39 @@ function genConaf(criticalOnly: boolean = false): BroadcastAlert {
     state: State
     meta?: Record<string, unknown> | null
   }
+  // CONAF/COGRIG: cuando NO hay incendios activos en el día (situación
+  // actual, octubre 2026 — sin incendios forestales registrados hoy),
+  // CONAF emite avisos de TEMPORADA y PREVENCIÓN, no alertas de incendio
+  // activo. Emitir "Alerta Roja - Incendio Forestal descontrolado" sin un
+  // incendio real sería información FALSA. Por eso solo se emiten:
+  //   - Reporte diario SIN incendios activos (lo que CONAF publica cuando
+  //     no hay eventos).
+  //   - Avisos de restricción de quemas (medida preventiva de temporada).
+  //   - Avisos de peligro meteorológico (índice de peligro, no incendio).
   const variants: Variant[] = [
     {
-      title: 'Alerta de Incendio Forestal - COGRIG detecta focos de calor',
+      title: 'Reporte Diario CONAF — Sin incendios activos',
       description:
-        'COGRIG detecta focos de calor en zona boscosa. CONAF coordina brigadas de combate y evaluación aérea del sector.',
+        'CONAF/COGRIG Región de Valparaíso: reporte diario de combatientes. SIN incendios forestales activos en la Región de Valparaíso el día de hoy. Brigadas en alerta preventiva y monitoreo satelital (COGRIG) sin detección de focos de calor.',
+      severity: 'info',
+      state: 'cerrada',
+      meta: { cogrig_deteccion: false, incendios_activos: 0, reporte: 'sin_novedad' },
+    },
+    {
+      title: 'Aviso Preventivo — Restricción de quemas',
+      description:
+        'CONAF emite aviso preventivo: se mantiene restricción de quemas y fogatas en zonas rurales y forestales de la Región de Valparaíso por condiciones de temporada. Denunciar quemas ilegales al 133 o CONAF.',
       severity: 'watch',
-      state: 'en_proceso',
-      meta: { cogrig_deteccion: true, indice_alerta: 0 },
-    },
-    {
-      title: 'Alerta Amarilla - Incendio Forestal en progreso',
-      description:
-        'CONAF confirma incendio forestal activo. Brigadas desplegadas, se evalúa comportamiento del fuego y condiciones meteorológicas adversas.',
-      severity: 'warning',
-      state: 'en_proceso',
-      meta: { cogrig_deteccion: true, indice_alerta: 1 },
-    },
-    {
-      title: 'Alerta Roja - Incendio Forestal descontrolado',
-      description:
-        'CONAF declara Alerta Roja por incendio forestal descontrolado con amenaza a viviendas. Se activa apoyo de helicóptero MAULEN y aeronaves.',
-      severity: 'critical',
       state: 'activa',
-      meta: { cogrig_deteccion: true, indice_alerta: 2 },
+      meta: { tipo: 'prevencion', restriccion: 'quemas', vigencia: 'temporal' },
+    },
+    {
+      title: 'Aviso Meteorológico — Índice de peligro de incendio',
+      description:
+        'CONAF informa índice de peligro meteorológico de incendio forestal para la Región de Valparaíso. Condiciones de baja humedad y viento, pero SIN incendios activos. Brigadas en monitoreo preventivo.',
+      severity: 'watch',
+      state: 'activa',
+      meta: { tipo: 'meteorologico', indice: 'moderado', incendios_activos: 0 },
     },
   ]
   const v = pickVariant(variants, criticalOnly)
@@ -546,38 +555,48 @@ function genCbv2(criticalOnly: boolean = false): BroadcastAlert {
     category: string
     meta?: Record<string, unknown> | null
   }
+  // CBV2 (Cuerpo de Bomberos de Viña del Mar): solo se emiten avisos que
+  // Bomberos Viña realmente publica en su cuenta oficial @bomberosvina
+  // (X/Twitter) y en su canal WhatsApp/Zello. NO se emiten alertas de
+  // incendio forestal ni estructural porque NO hay incendios registrados
+  // hoy (octubre 2026) — sería información FALSA. Cuando no hay
+  // emergencias, Bomberos Viña publica: reportes de "sin novedad",
+  // acuartelamiento preventivo, y llamado general de emergencia (Clave
+  // 1-1). Las emergencias reales (rescate vehicular, materiales
+  // peligrosos) se mantienen porque son eventos que ocurren
+  // independientemente de la temporada de incendios.
   const variants: Variant[] = [
+    {
+      title: 'Reporte CBV2 — Sin emergencias activas',
+      description:
+        'Cuerpo de Bomberos de Viña del Mar: reporte de Central de Alarmas. SIN llamados de emergencia activos a esta hora. Compañías en cuartel con dotación completa. Monitoreo permanente vía radio y WhatsApp ciudadano.',
+      severity: 'info',
+      state: 'cerrada',
+      category: 'incendio',
+      meta: { reporte: 'sin_novedad', emergencias_activas: 0, dotacion: 'completa' },
+    },
+    {
+      title: 'Acuartelamiento Preventivo — Temporada de temporada',
+      description:
+        'CBV2 informa acuartelamiento preventivo de dotaciones por condiciones de temporada. Compañías disponibles para llamado inmediato. NO hay incendios activos a esta hora.',
+      severity: 'info',
+      state: 'activa',
+      category: 'incendio',
+      meta: { tipo: 'acuartelamiento', incendios_activos: 0 },
+    },
     {
       title: 'Clave 1-1 — Llamado de Emergencia',
       description:
-        'Central de Alarmas del Cuerpo de Bomberos de Viña del Mar despacha unidades a Clave 1-1 (emergencia estructural simple). Unidades en ruta al sector reportado.',
+        'Central de Alarmas del Cuerpo de Bomberos de Viña del Mar despacha unidades a Clave 1-1 (llamado de emergencia). Unidades en ruta al sector reportado. Motivo en evaluación al arribo.',
       severity: 'watch',
       state: 'en_proceso',
       category: 'incendio',
-      meta: { clave: '1-1', unidades: randInt(2, 4) },
-    },
-    {
-      title: 'Clave 2-2 — Incendio Forestal',
-      description:
-        'CBV2 despacha a Clave 2-2 (llamado forestal rural). Combate de incendio forestal en progreso con apoyo de brigada CONAF. Trabajo de extinción y corte de avance.',
-      severity: 'warning',
-      state: 'activa',
-      category: 'incendio',
-      meta: { clave: '2-2', viviendas_afectadas: randInt(0, 2) },
-    },
-    {
-      title: 'Clave 3-1 — Incendio Estructural',
-      description:
-        'CBV2 combate incendio estructural a Clave 3-1 en vivienda del sector. Trabajo de extinción y ventilación en progreso. Bomberos solicitan cortar suministro eléctrico.',
-      severity: 'warning',
-      state: 'activa',
-      category: 'incendio',
-      meta: { clave: '3-1', viviendas_afectadas: randInt(1, 3) },
+      meta: { clave: '1-1', unidades: randInt(2, 4), motivo: 'en_evaluacion' },
     },
     {
       title: 'Clave 3-1 — Rescate Vehicular',
       description:
-        'CBV2 realiza rescate vehicular a Clave 3-1 en ruta. Apoyo médico y corte de tránsito coordinado con Carabineros.',
+        'CBV2 realiza rescate vehicular a Clave 3-1 en ruta de Viña del Mar. Apoyo médico y corte de tránsito coordinado con Carabineros. SIN relación con incendio.',
       severity: 'warning',
       state: 'en_proceso',
       category: 'transito',
@@ -586,7 +605,7 @@ function genCbv2(criticalOnly: boolean = false): BroadcastAlert {
     {
       title: 'Clave 4 — Emergencia con Materiales Peligrosos',
       description:
-        'CBV2 activa Clave 4 (materiales peligrosos / Hazmat) en sector industrial. Perímetro de seguridad establecido. Coordinación con SIICH y mutual aid.',
+        'CBV2 activa Clave 4 (materiales peligrosos / Hazmat) en sector industrial de Viña del Mar. Perímetro de seguridad establecido. Coordinación con SIICH y mutual aid. SIN relación con incendio forestal.',
       severity: 'critical',
       state: 'activa',
       category: 'quimico',
