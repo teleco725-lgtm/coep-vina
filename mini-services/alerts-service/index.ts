@@ -791,30 +791,75 @@ function emitAlert(alert: BroadcastAlert): void {
 }
 
 // ============================================================================
-// Timers
+// Timers por fuente — frecuencias realistas
+// ----------------------------------------------------------------------------
+// Cada fuente oficial emite alertas a su propio ritmo. Esto evita que el
+// dashboard se llene de notificaciones falsas con el tiempo.
+//
+// Frecuencias basadas en la realidad:
+//   SENAPRED:  1 alerta por dia (sin temporal) o 2 por dia (con catastrofe)
+//   CONAF:     1 alerta cada 6-12 horas (reporte diario + prevencion)
+//   SHOA:      1 radioaviso NURNAV cada 8-24 horas (infrecuente)
+//   CBV2:      1 llamado cada 30-90 minutos (bomberos atiende llamados)
+//   Carabineros: 1 comunicado cada 1-3 horas (hechos delictuales)
+//   Chilquinta: 1 corte cada 2-6 horas (cortes de luz puntuales)
+//
+// Para demo, aceleramos x4 (dividimos los intervalos por 4) para que el
+// operador vea actividad sin esperar horas. Aun asi, MUCHO menos ruido
+// que antes (que era cada 8-20 segundos).
 // ============================================================================
-let alertTimer: ReturnType<typeof setTimeout> | null = null
 let statsTimer: ReturnType<typeof setInterval> | null = null
+const timers: ReturnType<typeof setTimeout>[] = []
 
-// Limite del historial en memoria. Antes era 200, lo que acumulaba cientos
-// de alertas falsas con el tiempo. Ahora 50: suficiente para ver lo reciente
-// sin llenar el dashboard de ruido.
-const HISTORY_MAX_REALIST = 50
+function scheduleSourceAlert(
+  generator: () => BroadcastAlert,
+  intervalMin: number, // minutos minimos
+  intervalMax: number, // minutos maximos
+  sourceName: string,
+): void {
+  // Para demo: dividir por 4 para ver actividad mas rapido, pero seguir
+  // siendo realista (no cada 8-20 segundos como antes).
+  const demoFactor = 4
+  const minMs = (intervalMin * 60 * 1000) / demoFactor
+  const maxMs = (intervalMax * 60 * 1000) / demoFactor
+  const delayMs = rand(minMs, maxMs)
 
-function scheduleNextAlert(): void {
-  // FRECUENCIA REALISTA: una alerta cada 2 a 8 minutos (no cada 8-20 segundos).
-  // En la realidad, SENAPRED emite 2-5 alertas por dia, SHOA ocasionalmente,
-  // CBV2 5-15 llamados por dia, Carabineros algunos comunicados, Chilquinta
-  // cortes ocasionales. NO se emiten cientos de alertas por hora.
-  // 2-8 minutos = 120000 a 480000 ms. Para demo, aceleramos un poco: 60-240s.
-  const delayMs = rand(60000, 240000) // 1 a 4 minutos
-  alertTimer = setTimeout(() => {
-    // Solo emitir si el buffer no esta lleno (evita acumular falsos)
-    if (history.length < HISTORY_MAX_REALIST) {
-      emitAlert(generateAlert())
+  const timer = setTimeout(() => {
+    // Solo emitir si el buffer no esta lleno
+    if (history.length < HISTORY_MAX) {
+      emitAlert(withVerification(generator()))
     }
-    scheduleNextAlert()
+    // Re-agendar
+    scheduleSourceAlert(generator, intervalMin, intervalMax, sourceName)
   }, delayMs)
+
+  timers.push(timer)
+}
+
+function scheduleAllSources(): void {
+  // SENAPRED: 1 alerta por dia sin temporal, 2 con catastrofe.
+  // Para demo: cada 30-60 minutos (1-2 horas reales / 4)
+  scheduleSourceAlert(genSenapred, 120, 240, 'SENAPRED')
+
+  // CONAF: reporte diario + prevencion. Cada 6-12 horas reales.
+  // Para demo: cada 90-180 minutos
+  scheduleSourceAlert(genConaf, 360, 720, 'CONAF')
+
+  // SHOA: NURNAV infrecuente. Cada 8-24 horas reales.
+  // Para demo: cada 120-360 minutos
+  scheduleSourceAlert(genShoa, 480, 1440, 'SHOA')
+
+  // CBV2: Bomberos atiende llamados. 5-15 por dia real.
+  // Para demo: cada 8-20 minutos (30-80 min reales / 4)
+  scheduleSourceAlert(genCbv2, 30, 80, 'CBV2')
+
+  // Carabineros: comunicados de seguridad. Algunos por dia.
+  // Para demo: cada 15-45 minutos
+  scheduleSourceAlert(genCarabineros, 60, 180, 'Carabineros')
+
+  // Chilquinta: cortes de luz puntuales. Ocasionales.
+  // Para demo: cada 30-90 minutos
+  scheduleSourceAlert(genChilquinta, 120, 360, 'Chilquinta')
 }
 
 // NOTA: El timer de mareas (scheduleNextTide) se eliminó. SHOA NO siempre
@@ -852,13 +897,13 @@ httpServer.listen(PORT, () => {
   )
   console.log('============================================================')
 
-  // Seed: solo 5 alertas iniciales (antes eran 20, que llenaba el dashboard
-  // de ruido). Con 5 es suficiente para que la pagina arranque con datos.
-  for (let i = 0; i < 5; i++) {
+  // Seed: solo 3 alertas iniciales (realista, no 20 como antes).
+  for (let i = 0; i < 3; i++) {
     pushAlert(generateAlert())
   }
 
-  scheduleNextAlert()
+  // Iniciar timers por fuente con frecuencias realistas
+  scheduleAllSources()
   scheduleStats()
 
   console.log('[alerts-service] bootstrapped. Awaiting client connections...')
@@ -873,7 +918,7 @@ function shutdown(signal: string): void {
   shuttingDown = true
   console.log(`[alerts-service] received ${signal}, shutting down gracefully...`)
 
-  if (alertTimer) clearTimeout(alertTimer)
+  timers.forEach((t) => clearTimeout(t))
   if (statsTimer) clearInterval(statsTimer)
 
   // Close all open connections first, then the HTTP server.
