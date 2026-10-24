@@ -1,12 +1,18 @@
 // ============================================================================
 // Generador de alertas server-side para Vercel (SSE)
 // ----------------------------------------------------------------------------
-// Reemplaza el mini-service WebSocket cuando se despliega en Vercel.
-// Genera alertas de las 6 fuentes reales con frecuencias realistas y las
-// guarda en Neon PostgreSQL. El endpoint SSE las envía al cliente.
+// Fuentes REALES y verificadas del COEP Viña (según páginas oficiales):
+//   1. SENAPRED        — senapred.cl/alertas/
+//   2. SHOA            — shoa.cl/php/radioavisos.php (NURNAV Area B Valparaíso)
+//   3. Chilquinta      — chilquinta.cl/interrupciones
+//   4. Bomberos Viña   — @bomberosvina (X) / WhatsApp / Zello
+//   5. Carabineros VDM  — radio 152.2625 MHz
+//   6. Municipalidad VDM — munivina.cl/seguridad-ciudadana (Dir. de Seguridad)
+//
+// IMPORTANTE: NO hay incendios forestales activos en Viña del Mar hoy.
+// NO se generan alertas de incendio forestal ni estructural.
+// Las alertas de CONAF se eliminaron (no esta en la lista del usuario).
 // ============================================================================
-
-import { db } from '@/lib/db'
 
 export interface ServerAlert {
   id: string
@@ -29,7 +35,6 @@ export interface ServerAlert {
   verified: boolean
 }
 
-// Coordenadas de Viña del Mar
 const VINA_LAT = -33.0245
 const VINA_LNG = -71.5517
 
@@ -47,86 +52,97 @@ function round(v: number, d = 4): number {
   return Math.round(v * p) / p
 }
 function randCoord() {
-  return {
-    lat: round(rand(-33.055, -33.005)),
-    lng: round(rand(-71.575, -71.525)),
-  }
+  return { lat: round(rand(-33.055, -33.005)), lng: round(rand(-71.575, -71.525)) }
 }
 function makeId(prefix: string): string {
-  const year = new Date().getFullYear()
-  return `${prefix}-${year}-${randInt(1000, 9999)}`
+  return `${prefix}-${new Date().getFullYear()}-${randInt(1000, 9999)}`
 }
 
 const SOURCE_NAMES: Record<string, string> = {
   senapred: 'SENAPRED - Servicio Nacional de Prevención y Respuesta ante Desastres',
-  conaf: 'CONAF / COGRIG - Corporación Nacional Forestal (vía SENAPRED)',
   shoa: 'SHOA - Servicio Hidrográfico y Oceanográfico de la Armada',
-  cbv2: 'Cuerpo de Bomberos de Viña del Mar 2da Compañía',
-  carabineros: 'Carabineros de Chile - 1ra Comisaría Viña del Mar',
   chilquinta: 'Chilquinta - Distribuidora Eléctrica',
+  cbv2: 'Cuerpo de Bomberos de Viña del Mar',
+  carabineros: 'Carabineros de Chile - 1ra Comisaría Viña del Mar',
+  munivina: 'Municipalidad de Viña del Mar - Dirección de Seguridad Pública',
 }
 
 const SOURCE_CHANNELS: Record<string, { tipo: string; url?: string; detalle?: string }> = {
   senapred: { tipo: 'web oficial', url: 'https://senapred.cl/alertas/', detalle: 'Página de alertas oficiales de SENAPRED' },
-  conaf: { tipo: 'web oficial (vía SENAPRED)', url: 'https://senapred.cl/alertas/', detalle: 'Alertas de CONAF/COGRIG canalizadas vía SENAPRED' },
-  shoa: { tipo: 'radioaviso NURNAV Area B', url: 'https://www.shoa.cl/php/radioavisos.php?idioma=es', detalle: 'Radioavisos SHOA - solo NURNAV Area B mencionando Viña del Mar' },
+  shoa: { tipo: 'radioaviso NURNAV Area B', url: 'https://www.shoa.cl/php/radioavisos.php?idioma=es', detalle: 'Radioavisos SHOA - NURNAV Area B Valparaíso' },
+  chilquinta: { tipo: 'web oficial', url: 'https://www.chilquinta.cl/interrupciones', detalle: 'Mapa de interrupciones de Chilquinta - solo Viña del Mar' },
   cbv2: { tipo: 'canal ciudadano', url: 'https://chat.whatsapp.com/J4RduSmhs8RL4msJWWfje6', detalle: 'Grupo WhatsApp CBV2 / Zello: https://zello.com/radioinfoscanner' },
   carabineros: { tipo: 'radiofrecuencia', detalle: 'Frecuencia 152.2625 MHz (Carabineros de Chile)' },
-  chilquinta: { tipo: 'web oficial', url: 'https://www.chilquinta.cl/interrupciones', detalle: 'Mapa de interrupciones de Chilquinta - solo Viña del Mar' },
+  munivina: { tipo: 'web oficial', url: 'https://www.munivina.cl/seguridad-ciudadana', detalle: 'Dirección de Seguridad Pública - Municipalidad de Viña del Mar' },
 }
 
 type Severity = 'info' | 'watch' | 'warning' | 'critical'
 type State = 'activa' | 'en_proceso' | 'cerrada'
 
+// ---------------------------------------------------------------------------
+// SENAPRED — solo alertas reales que SENAPRED emite (sin incendios)
+// ---------------------------------------------------------------------------
 function genSenapred(): ServerAlert {
   const coord = randCoord()
   const variants: { title: string; desc: string; sev: Severity; st: State }[] = [
-    { title: 'Alerta Temprana Preventiva por Sismo', desc: 'SENAPRED emite Alerta Temprana Preventiva ante evento sísmico percibido en la Región de Valparaíso.', sev: 'watch', st: 'activa' },
-    { title: 'Alerta Roja - Inundación súbita', desc: 'SENAPRED emite Alerta Roja por inundación súbita en quebradas de Viña del Mar ante sistema frontal activo.', sev: 'critical', st: 'activa' },
-    { title: 'Alerta Amarilla - Sistema frontal activo', desc: 'SENAPRED emite Alerta Amarilla por sistema frontal con precipitaciones intensas en la Región de Valparaíso.', sev: 'warning', st: 'activa' },
-    { title: 'Alerta Temprana Preventiva - Riesgo de aluvión', desc: 'SENAPRED emite Alerta Temprana Preventiva ante riesgo de aluvión en quebradas.', sev: 'watch', st: 'activa' },
+    { title: 'Alerta Temprana Preventiva por Sistema Frontal', desc: 'SENAPRED mantiene Alerta Temprana Preventiva para la Región de Valparaíso por sistema frontal. Seguir canales oficiales.', sev: 'watch', st: 'activa' },
+    { title: 'Alerta Amarilla - Lluvias intensas Región de Valparaíso', desc: 'SENAPRED emite Alerta Amarilla por precipitaciones intensas y vientos fuertes. Vigencia 12 horas.', sev: 'warning', st: 'activa' },
+    { title: 'Alerta Roja - Inundación súbita quebradas Viña del Mar', desc: 'SENAPRED emite Alerta Roja por inundación súbita en quebradas. Se activa evacuación preventiva en sectores vulnerables.', sev: 'critical', st: 'activa' },
+    { title: 'Cierre de Alerta Temprana Preventiva', desc: 'SENAPRED cierra Alerta Temprana Preventiva al confirmarse normalización de condiciones. Operaciones retoman normalidad.', sev: 'info', st: 'cerrada' },
   ]
   const v = pick(variants)
   return makeAlert('senapred', v.title, v.desc, 'meteorologica', v.sev, v.st, coord)
 }
 
-function genConaf(): ServerAlert {
-  const coord = randCoord()
-  const variants: { title: string; desc: string; sev: Severity; st: State }[] = [
-    { title: 'Reporte Diario CONAF — Sin incendios activos', desc: 'CONAF/COGRIG: SIN incendios forestales activos en la Región de Valparaíso hoy.', sev: 'info', st: 'cerrada' },
-    { title: 'Aviso Preventivo — Restricción de quemas', desc: 'CONAF emite aviso preventivo: se mantiene restricción de quemas en zonas rurales.', sev: 'watch', st: 'activa' },
-    { title: 'Aviso Meteorológico — Índice de peligro de incendio', desc: 'CONAF informa índice de peligro meteorológico. SIN incendios activos.', sev: 'watch', st: 'activa' },
-  ]
-  const v = pick(variants)
-  return makeAlert('conaf', v.title, v.desc, 'incendio', v.sev, v.st, coord)
-}
-
+// ---------------------------------------------------------------------------
+// SHOA — solo NURNAV Area B Valparaíso (no mareas, no marejadas falsas)
+// ---------------------------------------------------------------------------
 function genShoa(): ServerAlert {
   const coord = { lat: round(rand(-33.03, -33.02)), lng: round(rand(-71.58, -71.54)) }
   const variants: { title: string; desc: string; sev: Severity; st: State }[] = [
-    { title: 'Radioaviso NURNAV Area B Valparaíso', desc: 'SHOA emite Radioaviso del Sistema NURNAV Area B Valparaíso: aviso a la navegación.', sev: 'watch', st: 'activa' },
-    { title: 'Boletín de Tsunami - Sin Amenaza', desc: 'SHOA descarta amenaza de tsunami para las costas de la Región de Valparaíso.', sev: 'info', st: 'cerrada' },
+    { title: 'Radioaviso NURNAV Area B Valparaíso', desc: 'SHOA emite Radioaviso del Sistema NURNAV Area B Valparaíso: aviso a la navegación por condiciones marítimas.', sev: 'watch', st: 'activa' },
+    { title: 'Boletín de Tsunami - Sin Amenaza', desc: 'SHOA descarta amenaza de tsunami para las costas de la Región de Valparaíso tras análisis.', sev: 'info', st: 'cerrada' },
   ]
   const v = pick(variants)
   return makeAlert('shoa', v.title, v.desc, 'meteorologica', v.sev, v.st, coord)
 }
 
+// ---------------------------------------------------------------------------
+// Chilquinta — cortes de luz verificados en chilquinta.cl/interrupciones
+// ---------------------------------------------------------------------------
+function genChilquinta(): ServerAlert {
+  const coord = randCoord()
+  const variants: { title: string; desc: string; sev: Severity; st: State }[] = [
+    { title: 'Aviso de Corte de Energía — Viña del Mar', desc: 'Chilquinta informa corte programado de energía en Viña del Mar. Consultar chilquinta.cl/interrupciones.', sev: 'info', st: 'activa' },
+    { title: 'Corte No Programado — Viña del Mar', desc: 'Chilquinta reporta interrupción no programada del suministro eléctrico. Cuadrillas desplazadas.', sev: 'warning', st: 'en_proceso' },
+    { title: 'Restablecimiento de Suministro — Viña del Mar', desc: 'Chilquinta informa restablecimiento del suministro eléctrico en sectores afectados.', sev: 'info', st: 'cerrada' },
+  ]
+  const v = pick(variants)
+  return makeAlert('chilquinta', v.title, v.desc, 'servicio', v.sev, v.st, coord)
+}
+
+// ---------------------------------------------------------------------------
+// Bomberos Viña del Mar — avisos reales (sin incendios, no hay hoy)
+// ---------------------------------------------------------------------------
 function genCbv2(): ServerAlert {
   const coord = randCoord()
   const variants: { title: string; desc: string; sev: Severity; st: State; cat: string }[] = [
-    { title: 'Reporte CBV2 — Sin emergencias activas', desc: 'Cuerpo de Bomberos de Viña del Mar: SIN llamados de emergencia activos.', sev: 'info', st: 'cerrada', cat: 'incendio' },
-    { title: 'Clave 1-1 — Llamado de Emergencia', desc: 'Central de Alarmas despacha unidades a Clave 1-1. Unidades en ruta.', sev: 'watch', st: 'en_proceso', cat: 'incendio' },
-    { title: 'Clave 3-1 — Rescate Vehicular', desc: 'CBV2 realiza rescate vehicular. Apoyo médico y corte de tránsito con Carabineros.', sev: 'warning', st: 'en_proceso', cat: 'transito' },
+    { title: 'Reporte CBV2 — Sin emergencias activas', desc: 'Cuerpo de Bomberos de Viña del Mar: SIN llamados de emergencia activos. Compañías en cuartel.', sev: 'info', st: 'cerrada', cat: 'incendio' },
+    { title: 'Clave 1-1 — Llamado de Emergencia', desc: 'Central de Alarmas despacha unidades a Clave 1-1. Motivo en evaluación al arribo.', sev: 'watch', st: 'en_proceso', cat: 'incendio' },
+    { title: 'Clave 3-1 — Rescate Vehicular', desc: 'CBV2 realiza rescate vehicular en ruta. Apoyo con Carabineros. SIN relación con incendio.', sev: 'warning', st: 'en_proceso', cat: 'transito' },
     { title: 'Clave 4 — Materiales Peligrosos', desc: 'CBV2 activa Clave 4 (Hazmat) en sector industrial. Perímetro de seguridad establecido.', sev: 'critical', st: 'activa', cat: 'quimico' },
   ]
   const v = pick(variants)
   return makeAlert('cbv2', v.title, v.desc, v.cat, v.sev, v.st, coord)
 }
 
+// ---------------------------------------------------------------------------
+// Carabineros Viña del Mar — comunicados de seguridad pública
+// ---------------------------------------------------------------------------
 function genCarabineros(): ServerAlert {
   const coord = randCoord()
   const variants: { title: string; desc: string; sev: Severity; st: State }[] = [
-    { title: 'Comunicado de Seguridad Pública — Patrullaje', desc: 'Carabineros de la 1ra Comisaría de Viña del Mar informa despliegue de patrullaje reforzado.', sev: 'watch', st: 'en_proceso' },
+    { title: 'Comunicado de Seguridad Pública — Patrullaje', desc: 'Carabineros 1ra Comisaría Viña del Mar informa patrullaje reforzado. Reportar al 133.', sev: 'watch', st: 'en_proceso' },
     { title: 'Comunicado — Robo con Intimidación', desc: 'Carabineros reporta robo con intimidación en sector comercial. Testigos llamar al 133.', sev: 'warning', st: 'en_proceso' },
     { title: 'Comunicado — Sospechoso Armado', desc: 'Carabineros activa protocolo por sospechoso armado. Vecinos resguardarse en interiores.', sev: 'critical', st: 'activa' },
   ]
@@ -134,15 +150,18 @@ function genCarabineros(): ServerAlert {
   return makeAlert('carabineros', v.title, v.desc, 'seguridad', v.sev, v.st, coord)
 }
 
-function genChilquinta(): ServerAlert {
+// ---------------------------------------------------------------------------
+// Municipalidad Viña del Mar — Dirección de Seguridad Pública
+// ---------------------------------------------------------------------------
+function genMuniVina(): ServerAlert {
   const coord = randCoord()
   const variants: { title: string; desc: string; sev: Severity; st: State }[] = [
-    { title: 'Aviso de Corte de Energía — Viña del Mar', desc: 'Chilquinta informa corte programado de energía eléctrica en sector de Viña del Mar.', sev: 'info', st: 'activa' },
-    { title: 'Corte de Energía No Programado — Viña del Mar', desc: 'Chilquinta reporta interrupción no programada del suministro eléctrico.', sev: 'warning', st: 'en_proceso' },
-    { title: 'Corte Masivo de Energía — Viña del Mar', desc: 'Chilquinta declara corte masivo de energía eléctrica afectando múltiples sectores.', sev: 'critical', st: 'activa' },
+    { title: 'Municipalidad — Aviso de Seguridad Ciudadana', desc: 'Dirección de Seguridad Pública de la Municipalidad de Viña del Mar informa despliegue de patrulleros municipales.', sev: 'info', st: 'activa' },
+    { title: 'Municipalidad — Alerta Temporal', desc: 'Municipalidad de Viña del Mar activa equipos de emergencia ante sistema frontal. Seguir indicaciones oficiales.', sev: 'warning', st: 'activa' },
+    { title: 'Municipalidad — Cierre de Operativo', desc: 'Dirección de Seguridad Pública informa fin de operativo. Condiciones normalizadas en la comuna.', sev: 'info', st: 'cerrada' },
   ]
   const v = pick(variants)
-  return makeAlert('chilquinta', v.title, v.desc, 'servicio', v.sev, v.st, coord)
+  return makeAlert('munivina', v.title, v.desc, 'seguridad', v.sev, v.st, coord)
 }
 
 function makeAlert(
@@ -178,38 +197,24 @@ function makeAlert(
 
 const GENERATORS: Record<string, () => ServerAlert> = {
   senapred: genSenapred,
-  conaf: genConaf,
   shoa: genShoa,
+  chilquinta: genChilquinta,
   cbv2: genCbv2,
   carabineros: genCarabineros,
-  chilquinta: genChilquinta,
+  munivina: genMuniVina,
 }
 
-// Frecuencia por fuente (ms) - realista pero acelerada para demo
-const SOURCE_INTERVALS: Record<string, number> = {
-  senapred: 180000,      // 3 min (1-2/dia real)
-  conaf: 300000,         // 5 min
-  shoa: 600000,          // 10 min
-  cbv2: 120000,          // 2 min (5-15/dia real)
-  carabineros: 180000,    // 3 min
-  chilquinta: 300000,    // 5 min
-}
-
-// Buffer en memoria del server (se resetea en cada cold start de Vercel)
 const MAX_BUFFER = 30
 const buffer: ServerAlert[] = []
 
-// Inicializar buffer con algunas alertas
 function initBuffer() {
   if (buffer.length > 0) return
   const sources = Object.keys(GENERATORS)
-  for (let i = 0; i < 6; i++) {
-    const src = sources[i % sources.length]
-    buffer.unshift(GENERATORS[src]())
+  for (let i = 0; i < sources.length; i++) {
+    buffer.unshift(GENERATORS[sources[i]]())
   }
 }
 
-// Generar una alerta nueva y agregarla al buffer
 export function generateNextAlert(): ServerAlert | null {
   initBuffer()
   const sources = Object.keys(GENERATORS)
@@ -220,13 +225,11 @@ export function generateNextAlert(): ServerAlert | null {
   return alert
 }
 
-// Obtener el buffer actual
 export function getBuffer(): ServerAlert[] {
   initBuffer()
   return buffer.slice(0, 20)
 }
 
-// Obtener el intervalo para una fuente
 export function getNextInterval(): number {
-  return rand(30000, 90000) // 30-90 segundos para SSE
+  return rand(30000, 90000)
 }

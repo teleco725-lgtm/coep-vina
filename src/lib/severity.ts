@@ -207,11 +207,11 @@ export function fichaStatusLabel(s: FichaStatus | string): string {
 // ============================================================================
 const SOURCE_COLORS: Record<SourceCode, string> = {
   senapred: 'var(--chart-1)', // azul petróleo
-  conaf: 'var(--chart-4)', // naranja (forestal)
   shoa: 'var(--chart-2)', // teal mar
   cbv2: 'var(--chart-5)', // rojo alerta (bomberos)
   carabineros: 'oklch(0.50 0.10 250)', // verde-azulado institucional
   chilquinta: 'oklch(0.55 0.12 70)', // ámbar (energía)
+  munivina: 'oklch(0.45 0.08 30)', // terracota (municipalidad)
 };
 
 export function sourceColor(code: SourceCode | string): string {
@@ -225,11 +225,11 @@ export function sourceColor(code: SourceCode | string): string {
 export function sourceShortLabel(code: SourceCode | string): string {
   const map: Record<string, string> = {
     senapred: 'SENAPRED',
-    conaf: 'CONAF',
     shoa: 'SHOA',
     cbv2: 'CBV2',
     carabineros: 'Carabineros',
     chilquinta: 'Chilquinta',
+    munivina: 'Municipalidad',
   };
   return map[code] ?? code;
 }

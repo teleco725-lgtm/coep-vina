@@ -30,11 +30,11 @@ export type Nature = 'natural' | 'antropico';
 // verificables (Guardia Marina, Red de Radio) se eliminaron.
 export type SourceCode =
   | 'senapred'
-  | 'conaf'
   | 'shoa'
   | 'cbv2'
   | 'carabineros'
-  | 'chilquinta';
+  | 'chilquinta'
+  | 'munivina';
 
 export type Category =
   | 'sismo'

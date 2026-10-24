@@ -22,11 +22,11 @@ type FilterCode = 'all' | SourceCode;
 const FILTERS: { code: FilterCode; label: string }[] = [
   { code: 'all', label: 'Todas' },
   { code: 'senapred', label: 'SENAPRED' },
-  { code: 'conaf', label: 'CONAF' },
   { code: 'shoa', label: 'SHOA' },
   { code: 'cbv2', label: 'CBV2' },
   { code: 'carabineros', label: 'Carabineros' },
   { code: 'chilquinta', label: 'Chilquinta' },
+  { code: 'munivina', label: 'Municipalidad' },
 ];
 
 export function LiveFeed() {

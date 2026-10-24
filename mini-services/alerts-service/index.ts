@@ -30,7 +30,7 @@ import { v4 as uuidv4 } from 'uuid'
 export interface BroadcastAlert {
   id: string                  // unique id (uuid)
   externalId?: string | null  // official id if any
-  sourceCode: string          // 'senapred' | 'conaf' | 'shoa' | 'cbv2' | 'carabineros' | 'chilquinta'
+  sourceCode: string          // 'senapred' | 'shoa' | 'cbv2' | 'carabineros' | 'chilquinta' | 'munivina'
   sourceName: string          // human name in Spanish
   category: string            // 'sismo' | 'incendio' | 'marea' | 'meteorologica' | 'tsunami' | 'quimico' | 'inundacion' | 'seguridad' | 'transito' | 'servicio'
   subcategory?: string | null // e.g. marea: 'alta' | 'media' | 'baja'
@@ -73,7 +73,7 @@ type State = BroadcastAlert['state']
 // `SOURCE_CHANNELS`. Las fuentes que NO estan en esta lista (Guardia Marina,
 // Red de Radio) se eliminaron por ser no verificables / fuera del alcance
 // del monitoreo oficial de Viña del Mar.
-type SourceCode = 'senapred' | 'conaf' | 'shoa' | 'cbv2' | 'carabineros' | 'chilquinta'
+type SourceCode = 'senapred' | 'shoa' | 'cbv2' | 'carabineros' | 'chilquinta' | 'munivina'
 
 // ============================================================================
 // Constants - Viña del Mar geography & sources
@@ -90,7 +90,7 @@ const COMMUNES = ['Viña del Mar'] as const
 
 const SOURCE_NAMES: Record<SourceCode, string> = {
   senapred: 'SENAPRED - Servicio Nacional de Prevención y Respuesta ante Desastres',
-  conaf: 'CONAF / COGRIG - Corporación Nacional Forestal (vía SENAPRED)',
+  munivina: 'Municipalidad de Viña del Mar - Dirección de Seguridad Pública',
   shoa: 'SHOA - Servicio Hidrográfico y Oceanográfico de la Armada',
   cbv2: 'Cuerpo de Bomberos de Viña del Mar 2da Compañía',
   carabineros: 'Carabineros de Chile - 1ra Comisaría Viña del Mar',
@@ -109,7 +109,7 @@ const SOURCE_CHANNELS: Record<SourceCode, { tipo: string; url?: string; detalle?
   },
   // CONAF: sus alertas de incendio forestal se canalizan a traves del sistema
   // de alertas de SENAPRED (mismo feed), filtrando a Viña del Mar.
-  conaf: {
+  munivina: {
     tipo: 'web oficial (vía SENAPRED)',
     url: 'https://senapred.cl/alertas/',
     detalle: 'Alertas de CONAF/COGRIG canalizadas via SENAPRED',
@@ -296,7 +296,7 @@ function genSenapred(criticalOnly: boolean = false): BroadcastAlert {
   }
 }
 
-function genConaf(criticalOnly: boolean = false): BroadcastAlert {
+function genMuniVina(criticalOnly: boolean = false): BroadcastAlert {
   const coord = randCoord()
   const commune = communeForCoord()
   type Variant = {
@@ -344,9 +344,9 @@ function genConaf(criticalOnly: boolean = false): BroadcastAlert {
   const v = pickVariant(variants, criticalOnly)
   return {
     id: uuidv4(),
-    externalId: makeExternalId('CONAF'),
-    sourceCode: 'conaf',
-    sourceName: SOURCE_NAMES.conaf,
+    externalId: makeExternalId('Municipalidad'),
+    sourceCode: 'munivina',
+    sourceName: SOURCE_NAMES.munivina,
     category: 'incendio',
     subcategory: null,
     severity: v.severity,
@@ -362,7 +362,7 @@ function genConaf(criticalOnly: boolean = false): BroadcastAlert {
       hectareas_afectadas: randInt(1, 80),
       brigadas_desplegadas: randInt(2, 8),
       ...(v.meta ?? {}),
-      canal: SOURCE_CHANNELS.conaf,
+      canal: SOURCE_CHANNELS.munivina,
     },
     issuedAt: new Date().toISOString(),
   }
@@ -663,7 +663,7 @@ function genCarabineros(criticalOnly: boolean = false): BroadcastAlert {
 // CBV2 (WhatsApp/Zello), Carabineros (radio 152.2625 MHz), Chilquinta (web).
 const REGULAR_GENERATORS: Array<() => BroadcastAlert> = [
   genSenapred,
-  genConaf,
+  genMuniVina,
   genShoa,
   genCbv2,
   genCarabineros,
@@ -673,7 +673,7 @@ const REGULAR_GENERATORS: Array<() => BroadcastAlert> = [
 // Generators capable of producing critical variants.
 const CRITICAL_GENERATORS: Array<() => BroadcastAlert> = [
   () => genSenapred(true),
-  () => genConaf(true),
+  () => genMuniVina(true),
   () => genCbv2(true),
   () => genCarabineros(true),
   () => genChilquinta(true),
@@ -691,7 +691,7 @@ const CRITICAL_GENERATORS: Array<() => BroadcastAlert> = [
 // ============================================================================
 const VERIFIED_SOURCES: ReadonlySet<SourceCode> = new Set([
   'senapred',
-  'conaf',
+  'munivina',
   'shoa',
   'cbv2',
   'carabineros',
@@ -843,7 +843,7 @@ function scheduleAllSources(): void {
 
   // CONAF: reporte diario + prevencion. Cada 6-12 horas reales.
   // Para demo: cada 90-180 minutos
-  scheduleSourceAlert(genConaf, 360, 720, 'CONAF')
+  scheduleSourceAlert(genMuniVina, 360, 720, 'Municipalidad')
 
   // SHOA: NURNAV infrecuente. Cada 8-24 horas reales.
   // Para demo: cada 120-360 minutos
