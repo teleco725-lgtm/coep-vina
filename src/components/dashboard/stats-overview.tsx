@@ -84,9 +84,11 @@ export function StatsOverview({
       id: 'active-incidents',
       label: 'Incidentes Activos',
       value: incidentsLoading ? null : activeIncidents,
-      sublabel: `estado "activa" de ${incidents.length} registrados`,
+      sublabel: activeIncidents === 0
+        ? 'Nivel 0 (Normalidad) — Panel Depurado'
+        : `hoy en Viña del Mar de ${incidents.length} registrados`,
       Icon: Flame,
-      iconColor: 'text-sev-warning',
+      iconColor: activeIncidents === 0 ? 'text-emerald-600' : 'text-sev-warning',
       bgIcon: 'bg-sev-warning/10',
       trend: '+',
       trendColor: 'text-muted-foreground',
