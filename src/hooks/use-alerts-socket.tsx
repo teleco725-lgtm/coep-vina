@@ -256,18 +256,61 @@ export function useAlertsSocket(): {
       }
     }, 2000);
 
-    // Safety net: si el socket no conecta en 8 segundos, forzar reconexión.
-    // El gateway Caddy a veces no reenvía el handshake correctamente y el
-    // socket se queda en estado "connecting" perpetuo.
-    const connectTimeout = setTimeout(() => {
+    // Safety net: si el socket no conecta en 5 segundos, activar SSE fallback.
+    // Esto hace que el dashboard funcione en Vercel (serverless) donde no hay
+    // WebSocket. El SSE (Server-Sent Events) si funciona en Vercel.
+    let sseFallback: EventSource | null = null;
+    const sseTimeout = setTimeout(() => {
       if (!socket.connected) {
-        socket.connect();
+        // WebSocket no conecto — activar SSE fallback
+        sseFallback = new EventSource('/api/alerts-stream');
+
+        sseFallback.addEventListener('history', (e) => {
+          setStatus('connected');
+          try {
+            const data = JSON.parse((e as MessageEvent).data) as BroadcastAlert[];
+            if (Array.isArray(data)) setAlerts(data);
+          } catch {}
+        });
+
+        sseFallback.addEventListener('alert', (e) => {
+          setStatus('connected');
+          try {
+            const alert = JSON.parse((e as MessageEvent).data) as BroadcastAlert;
+            if (alert && alert.id) {
+              prependAlert(alert);
+              if (alert.severity === 'critical') {
+                void ensureNotificationPermission();
+                void notifyServiceWorker(alert);
+              }
+            }
+          } catch {}
+        });
+
+        sseFallback.addEventListener('stats', (e) => {
+          try {
+            const s = JSON.parse((e as MessageEvent).data) as Stats;
+            if (s) setStats(s);
+          } catch {}
+        });
+
+        sseFallback.onerror = () => {
+          // SSE cerrado — marcar desconectado
+          setStatus('disconnected');
+        };
+
+        console.log('[alerts] WebSocket fallo — activando SSE fallback');
       }
-    }, 8000);
+    }, 5000);
 
     return () => {
       clearTimeout(connectTimeout);
+      clearTimeout(sseTimeout);
       clearInterval(statusInterval);
+      if (sseFallback) {
+        sseFallback.close();
+        sseFallback = null;
+      }
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
       socket.off('history', onHistory);
