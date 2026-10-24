@@ -127,8 +127,8 @@ function genChilquinta(): ServerAlert {
 function genCbv2(): ServerAlert {
   const coord = randCoord()
   const variants: { title: string; desc: string; sev: Severity; st: State; cat: string }[] = [
-    { title: 'Reporte CBV2 — Sin emergencias activas', desc: 'Cuerpo de Bomberos de Viña del Mar: SIN llamados de emergencia activos. Compañías en cuartel.', sev: 'info', st: 'cerrada', cat: 'incendio' },
-    { title: 'Clave 1-1 — Llamado de Emergencia', desc: 'Central de Alarmas despacha unidades a Clave 1-1. Motivo en evaluación al arribo.', sev: 'watch', st: 'en_proceso', cat: 'incendio' },
+    { title: 'Reporte CBV2 — Sin emergencias activas', desc: 'Cuerpo de Bomberos de Viña del Mar: SIN llamados de emergencia activos. Compañías en cuartel.', sev: 'info', st: 'cerrada', cat: 'seguridad' },
+    { title: 'Clave 1-1 — Llamado de Emergencia', desc: 'Central de Alarmas despacha unidades a Clave 1-1. Motivo en evaluación al arribo.', sev: 'watch', st: 'en_proceso', cat: 'seguridad' },
     { title: 'Clave 3-1 — Rescate Vehicular', desc: 'CBV2 realiza rescate vehicular en ruta. Apoyo con Carabineros. SIN relación con incendio.', sev: 'warning', st: 'en_proceso', cat: 'transito' },
     { title: 'Clave 4 — Materiales Peligrosos', desc: 'CBV2 activa Clave 4 (Hazmat) en sector industrial. Perímetro de seguridad establecido.', sev: 'critical', st: 'activa', cat: 'quimico' },
   ]

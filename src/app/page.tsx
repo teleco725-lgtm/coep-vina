@@ -449,6 +449,14 @@ function ExportMenu() {
           <Presentation className="h-4 w-4 text-amber-600" />
           PowerPoint (.pptx)
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => window.open('/Instructivo_COEP_Vina.pdf', '_blank')}
+          className="gap-2"
+        >
+          <FileText className="h-4 w-4 text-primary" />
+          Instructivo de Uso (PDF)
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
