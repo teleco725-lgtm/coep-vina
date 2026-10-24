@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
 """
-Generador del Contrato COEP Viña - Formato profesional
-- Icono en el encabezado de cada hoja
-- Logo como marca de agua
-- Formato VeltrixIntegra | Ecosistema Digital 360
+Contrato COEP Viña - Formato profesional corregido
+- Portada en pagina separada (sin superposicion)
+- Icono en encabezado + logo marca de agua sutil
 """
 import os
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm, mm
-from reportlab.lib.colors import HexColor, white, black
+from reportlab.lib.units import cm
+from reportlab.lib.colors import HexColor, white
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, PageBreak,
-    Table, TableStyle, Image, KeepTogether
-)
-from reportlab.pdfgen import canvas
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle
 from reportlab.lib import colors
 
 OUTPUT = "/home/z/my-project/download/Contrato_Prestacion_Servicios_COEP_Vina.pdf"
@@ -39,55 +34,56 @@ MT = 3.0 * cm
 MB = 2.5 * cm
 CW = PAGE_W - ML - MR
 
-def onPage(canvas_obj, doc):
-    canvas_obj.saveState()
-
+def dibujar_marca_agua(canvas_obj):
     if os.path.exists(LOGO):
         try:
-            wm_w = PAGE_W * 0.60
+            wm_w = PAGE_W * 0.55
             wm_h = wm_w / 4
             canvas_obj.saveState()
-            canvas_obj.setFillAlpha(0.06)
+            canvas_obj.setFillAlpha(0.04)
             canvas_obj.drawImage(LOGO, (PAGE_W - wm_w) / 2, (PAGE_H - wm_h) / 2, wm_w, wm_h, mask='auto', preserveAspectRatio=True)
             canvas_obj.restoreState()
         except: pass
 
+def dibujar_encabezado(canvas_obj, doc):
+    canvas_obj.saveState()
+    dibujar_marca_agua(canvas_obj)
+
     canvas_obj.setFillColor(AZUL)
     canvas_obj.rect(0, PAGE_H - 2.0 * cm, PAGE_W, 0.08 * cm, fill=1, stroke=0)
 
-    icon_size = 1.2 * cm
-    icon_y = PAGE_H - 1.8 * cm
+    icon_size = 1.1 * cm
+    icon_y = PAGE_H - 1.75 * cm
     if os.path.exists(ICONO):
         try:
-            canvas_obj.drawImage(ICONO, ML, icon_y - 0.1 * cm, icon_size, icon_size, mask='auto', preserveAspectRatio=True)
+            canvas_obj.drawImage(ICONO, ML, icon_y - 0.05 * cm, icon_size, icon_size, mask='auto', preserveAspectRatio=True)
         except: pass
 
     canvas_obj.setFillColor(AZUL)
-    canvas_obj.setFont('Helvetica-Bold', 10)
-    canvas_obj.drawString(ML + icon_size + 0.4 * cm, icon_y + 0.3 * cm, "VeltrixIntegra | Ecosistema Digital 360")
+    canvas_obj.setFont('Helvetica-Bold', 9)
+    canvas_obj.drawString(ML + icon_size + 0.3 * cm, icon_y + 0.25 * cm, "VeltrixIntegra | Ecosistema Digital 360")
     canvas_obj.setFillColor(HexColor('#555555'))
-    canvas_obj.setFont('Helvetica', 8)
-    canvas_obj.drawString(ML + icon_size + 0.4 * cm, icon_y - 0.1 * cm, "COEP Viña | Contrato de Prestación de Servicios Tecnológicos")
+    canvas_obj.setFont('Helvetica', 7.5)
+    canvas_obj.drawString(ML + icon_size + 0.3 * cm, icon_y - 0.05 * cm, "COEP Viña | Contrato de Prestación de Servicios")
 
     canvas_obj.setStrokeColor(ARENA)
-    canvas_obj.setLineWidth(1.5)
-    canvas_obj.line(ML, PAGE_H - 2.1 * cm, PAGE_W - MR, PAGE_H - 2.1 * cm)
+    canvas_obj.setLineWidth(1.2)
+    canvas_obj.line(ML, PAGE_H - 2.05 * cm, PAGE_W - MR, PAGE_H - 2.05 * cm)
 
     canvas_obj.setStrokeColor(GRIS_C)
     canvas_obj.setLineWidth(0.5)
-    canvas_obj.line(ML, 1.6 * cm, PAGE_W - MR, 1.6 * cm)
-
+    canvas_obj.line(ML, 1.5 * cm, PAGE_W - MR, 1.5 * cm)
     canvas_obj.setFillColor(GRIS_O)
-    canvas_obj.setFont('Helvetica', 7.5)
-    footer = "Claudio Urbina Vargas - Fundador VeltrixIntegra - +56 9 9619 4440 - claudio.urbina@vtr.net"
-    canvas_obj.drawCentredString(PAGE_W / 2, 1.0 * cm, footer)
+    canvas_obj.setFont('Helvetica', 7)
+    canvas_obj.drawCentredString(PAGE_W / 2, 0.9 * cm,
+        "Claudio Urbina Vargas - Fundador VeltrixIntegra - +56 9 9619 4440 - claudio.urbina@vtr.net")
     canvas_obj.setFillColor(AZUL)
-    canvas_obj.setFont('Helvetica-Bold', 8)
-    canvas_obj.drawRightString(PAGE_W - MR, 0.6 * cm, f"Pagina {doc.page}")
+    canvas_obj.setFont('Helvetica-Bold', 7.5)
+    canvas_obj.drawRightString(PAGE_W - MR, 0.5 * cm, f"Pagina {doc.page}")
 
     canvas_obj.restoreState()
 
-def onPortada(canvas_obj, doc):
+def dibujar_portada(canvas_obj, doc):
     canvas_obj.saveState()
 
     canvas_obj.setFillColor(AZUL)
@@ -95,65 +91,72 @@ def onPortada(canvas_obj, doc):
 
     if os.path.exists(LOGO):
         try:
-            wm_w = PAGE_W * 0.50
+            wm_w = PAGE_W * 0.45
             wm_h = wm_w / 4
             canvas_obj.saveState()
-            canvas_obj.setFillAlpha(0.12)
-            canvas_obj.drawImage(LOGO, (PAGE_W - wm_w) / 2, PAGE_H * 0.25, wm_w, wm_h, mask='auto', preserveAspectRatio=True)
+            canvas_obj.setFillAlpha(0.10)
+            canvas_obj.drawImage(LOGO, (PAGE_W - wm_w) / 2, PAGE_H * 0.22, wm_w, wm_h, mask='auto', preserveAspectRatio=True)
             canvas_obj.restoreState()
         except: pass
 
     if os.path.exists(ICONO):
         try:
-            ico_size = 4 * cm
-            canvas_obj.drawImage(ICONO, PAGE_W/2 - ico_size/2, PAGE_H * 0.74, ico_size, ico_size, mask='auto', preserveAspectRatio=True)
+            ico_size = 3.5 * cm
+            canvas_obj.drawImage(ICONO, PAGE_W/2 - ico_size/2, PAGE_H * 0.75, ico_size, ico_size, mask='auto', preserveAspectRatio=True)
         except: pass
 
     canvas_obj.setFillColor(ARENA)
-    canvas_obj.rect(PAGE_W * 0.2, PAGE_H * 0.69, PAGE_W * 0.6, 0.12 * cm, fill=1, stroke=0)
+    canvas_obj.rect(PAGE_W * 0.22, PAGE_H * 0.70, PAGE_W * 0.56, 0.1 * cm, fill=1, stroke=0)
 
     canvas_obj.setFillColor(BLANCO)
-    canvas_obj.setFont('Helvetica-Bold', 22)
-    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.63, "Contrato de Prestación")
-    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.58, "de Servicios Tecnológicos")
+    canvas_obj.setFont('Helvetica-Bold', 20)
+    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.64, "Contrato de Prestación")
+    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.59, "de Servicios Tecnológicos")
 
     canvas_obj.setFillColor(ARENA)
-    canvas_obj.setFont('Helvetica', 12)
-    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.52, "COEP Viña · Centro de Operaciones de Emergencia Provincial")
     canvas_obj.setFont('Helvetica', 11)
-    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.48, "VeltrixIntegra Ecosistema Digital 360°")
+    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.53, "COEP Viña · Centro de Operaciones de Emergencia Provincial")
+    canvas_obj.setFont('Helvetica', 10)
+    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.49, "VeltrixIntegra Ecosistema Digital 360°")
 
     canvas_obj.setFillColor(HexColor('#0d2a44'))
-    canvas_obj.roundRect(PAGE_W * 0.12, PAGE_H * 0.30, PAGE_W * 0.76, 2.2 * cm, 10, fill=1, stroke=0)
+    canvas_obj.roundRect(PAGE_W * 0.15, PAGE_H * 0.35, PAGE_W * 0.70, 2.0 * cm, 8, fill=1, stroke=0)
     canvas_obj.setFillColor(BLANCO)
-    canvas_obj.setFont('Helvetica-Bold', 12)
-    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.38, "Fecha: 24 de octubre de 2026")
+    canvas_obj.setFont('Helvetica-Bold', 11)
+    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.41, "Fecha: 24 de octubre de 2026")
     canvas_obj.setFillColor(ARENA_C)
-    canvas_obj.setFont('Helvetica-Oblique', 10)
-    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.34, "Viña del Mar, Región de Valparaíso, Chile")
+    canvas_obj.setFont('Helvetica-Oblique', 9)
+    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.37, "Viña del Mar, Región de Valparaíso, Chile")
 
     canvas_obj.setFillColor(BLANCO)
-    canvas_obj.setFont('Helvetica-Bold', 10)
-    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.20, "Claudio Urbina Vargas")
-    canvas_obj.setFont('Helvetica', 9)
+    canvas_obj.setFont('Helvetica-Bold', 9)
+    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.24, "Claudio Urbina Vargas")
+    canvas_obj.setFont('Helvetica', 8.5)
     canvas_obj.setFillColor(ARENA_C)
-    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.17, "Las Acacias 450 poniente paradero 12, Villa Alemana")
-    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.14, "+56 9 9619 4440 | claudio.urbina@vtr.net")
+    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.21, "Las Acacias 450 poniente paradero 12, Villa Alemana")
+    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.18, "+56 9 9619 4440 | claudio.urbina@vtr.net")
 
     canvas_obj.setFillColor(ARENA)
-    canvas_obj.setFont('Helvetica-Bold', 16)
-    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.08, "2026")
+    canvas_obj.setFont('Helvetica-Bold', 14)
+    canvas_obj.drawCentredString(PAGE_W / 2, PAGE_H * 0.10, "2026")
+
+    canvas_obj.setFillColor(HexColor('#0d2a44'))
+    canvas_obj.rect(0, 0, PAGE_W, 1.0 * cm, fill=1, stroke=0)
+    canvas_obj.setFillColor(ARENA_C)
+    canvas_obj.setFont('Helvetica', 7)
+    canvas_obj.drawCentredString(PAGE_W / 2, 0.35 * cm, "VeltrixIntegra | Ecosistema Digital 360 - COEP Viña 2026")
 
     canvas_obj.restoreState()
 
 styles = getSampleStyleSheet()
-
-h1 = ParagraphStyle('H1', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=15, textColor=AZUL, spaceBefore=18, spaceAfter=10, leading=19)
-h2 = ParagraphStyle('H2', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=11, textColor=AZUL_M, spaceBefore=12, spaceAfter=5, leading=14)
-body = ParagraphStyle('Body', parent=styles['Normal'], fontName='Helvetica', fontSize=10.5, textColor=GRIS_O, leading=16, alignment=TA_JUSTIFY, spaceAfter=8)
-body_center = ParagraphStyle('BodyCenter', parent=body, alignment=TA_CENTER)
+h1 = ParagraphStyle('H1', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=14, textColor=AZUL, spaceBefore=14, spaceAfter=8, leading=18)
+h2 = ParagraphStyle('H2', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=11, textColor=AZUL_M, spaceBefore=10, spaceAfter=4, leading=14)
+body = ParagraphStyle('Body', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=GRIS_O, leading=15, alignment=TA_JUSTIFY, spaceAfter=6)
 
 story = []
+
+# PageBreak para separar portada de contenido
+story.append(PageBreak())
 
 story.append(Paragraph("Contratantes", h1))
 story.append(Paragraph(
@@ -164,7 +167,7 @@ story.append(Paragraph(
     "Ambas partes acuerdan de manera libre y voluntaria los términos y condiciones "
     "estipulados en las siguientes cláusulas.", body))
 
-story.append(Spacer(1, 0.5 * cm))
+story.append(Spacer(1, 0.3 * cm))
 story.append(Paragraph("Cláusulas", h1))
 
 story.append(Paragraph("PRIMERA: Objeto del Contrato", h2))
@@ -199,26 +202,26 @@ story.append(Paragraph(
     "forma anticipada dentro de los primeros <b>5 días hábiles</b> de cada "
     "mes correlativo.", body))
 
-story.append(Spacer(1, 1.5 * cm))
+story.append(Spacer(1, 1.0 * cm))
 story.append(Paragraph("Firmas", h1))
-story.append(Spacer(1, 0.8 * cm))
+story.append(Spacer(1, 0.5 * cm))
 
 firma_data = [
-    [Paragraph("POR EL PROVEEDOR", ParagraphStyle('F1', parent=body, fontName='Helvetica-Bold', fontSize=10, textColor=AZUL, alignment=TA_CENTER)),
-     Paragraph("POR EL CLIENTE", ParagraphStyle('F2', parent=body, fontName='Helvetica-Bold', fontSize=10, textColor=AZUL, alignment=TA_CENTER))],
+    [Paragraph("POR EL PROVEEDOR", ParagraphStyle('F1', parent=body, fontName='Helvetica-Bold', fontSize=9, textColor=AZUL, alignment=TA_CENTER)),
+     Paragraph("POR EL CLIENTE", ParagraphStyle('F2', parent=body, fontName='Helvetica-Bold', fontSize=9, textColor=AZUL, alignment=TA_CENTER))],
     [Paragraph("<br/><br/>___________________________<br/><b>VeltrixIntegra Ecosistema Digital 360°</b><br/>Claudio Urbina Vargas<br/>Fundador<br/>+56 9 9619 4440",
-        ParagraphStyle('FB1', parent=body, fontSize=9, alignment=TA_CENTER, leading=14)),
+        ParagraphStyle('FB1', parent=body, fontSize=8.5, alignment=TA_CENTER, leading=13)),
      Paragraph("<br/><br/>___________________________<br/><b>COEP Viña</b><br/>Centro de Operaciones de Emergencia Provincial<br/>Municipalidad de Viña del Mar",
-        ParagraphStyle('FB2', parent=body, fontSize=9, alignment=TA_CENTER, leading=14))],
+        ParagraphStyle('FB2', parent=body, fontSize=8.5, alignment=TA_CENTER, leading=13))],
 ]
 
-t_firma = Table(firma_data, colWidths=[CW/2 - 0.5*cm, CW/2 - 0.5*cm])
+t_firma = Table(firma_data, colWidths=[CW/2 - 0.3*cm, CW/2 - 0.3*cm])
 t_firma.setStyle(TableStyle([
     ('VALIGN', (0,0), (-1,-1), 'TOP'),
-    ('TOPPADDING', (0,0), (-1,-1), 20),
-    ('BOTTOMPADDING', (0,0), (-1,-1), 10),
-    ('LEFTPADDING', (0,0), (-1,-1), 20),
-    ('RIGHTPADDING', (0,0), (-1,-1), 20),
+    ('TOPPADDING', (0,0), (-1,-1), 15),
+    ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+    ('LEFTPADDING', (0,0), (-1,-1), 15),
+    ('RIGHTPADDING', (0,0), (-1,-1), 15),
     ('LINEABOVE', (0,0), (-1,0), 1, AZUL),
     ('LINEBELOW', (0,0), (-1,0), 0.5, GRIS_C),
     ('BACKGROUND', (0,0), (-1,0), HexColor('#f8f8f8')),
@@ -231,7 +234,7 @@ doc = SimpleDocTemplate(OUTPUT, pagesize=A4, leftMargin=ML, rightMargin=MR, topM
     subject="Contrato COEP Viña - VeltrixIntegra Ecosistema Digital 360",
     creator="VeltrixIntegra Ecosistema Digital 360")
 
-doc.build(story, onFirstPage=onPortada, onLaterPages=onPage)
+doc.build(story, onFirstPage=dibujar_portada, onLaterPages=dibujar_encabezado)
 
 print(f"PDF generado: {OUTPUT}")
 print(f"Tamano: {os.path.getsize(OUTPUT) / 1024:.1f} KB")
