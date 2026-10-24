@@ -8,9 +8,9 @@ import type { Prisma } from "@prisma/client";
  *
  * Query params:
  *   - limit    (default 50, máximo 200)
- *   - source   (filtra por Source.code: senapred | conaf | shoa | guardiamarina | cbv2 | carabineros | radio)
+ *   - source   (filtra por Source.code: senapred | conaf | shoa | cbv2 | carabineros | chilquinta)
  *   - severity (info | watch | warning | critical)
- *   - category (sismo | incendio | marea | meteorologica | tsunami | quimico | inundacion | seguridad | transito | radio)
+ *   - category (sismo | incendio | marea | meteorologica | tsunami | quimico | inundacion | seguridad | transito | servicio)
  *   - state    (activa | en_proceso | cerrada)
  *   - commune  (texto libre, p.ej. "Viña del Mar")
  *

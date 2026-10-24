@@ -293,10 +293,9 @@ const SOURCE_LABELS: Record<string, string> = {
   senapred: 'SENAPRED',
   conaf: 'CONAF',
   shoa: 'SHOA',
-  guardiamarina: 'Guardia Marina',
   cbv2: 'CBV2',
   carabineros: 'Carabineros',
-  radio: 'Radio',
+  chilquinta: 'Chilquinta',
 };
 
 const INCIDENT_TYPE_LABELS: Record<string, string> = {

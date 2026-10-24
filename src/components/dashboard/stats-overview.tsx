@@ -15,6 +15,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { useAlertsSocket } from '@/hooks/use-alerts-socket';
+import { filtrarAlertasVigentes } from '@/lib/pipeline-ttl';
 import type { ApiStats, Incident } from '@/lib/types';
 
 interface StatsOverviewProps {
@@ -26,7 +27,7 @@ export function StatsOverview({
   incidents,
   incidentsLoading,
 }: StatsOverviewProps) {
-  const { stats, status } = useAlertsSocket();
+  const { alerts, stats, status } = useAlertsSocket();
   const [apiStats, setApiStats] = useState<ApiStats | null>(null);
 
   // Fetch /api/stats para fichas críticas/altas y fuentes.
@@ -46,12 +47,16 @@ export function StatsOverview({
   }, [incidents, incidentsLoading]);
 
   // --- KPI computations ---
-  // Total alertas activas: usamos stats del WS (por estado) o fallback a total.
-  const activeAlerts =
-    (stats?.byState?.activa ?? 0) +
-    (stats?.byState?.en_proceso ?? 0);
+  // Total alertas activas: usamos el pipeline TTL para contar SOLO las
+  // alertas vigentes (dentro de TTL, mismo día, no cerradas/informativas).
+  // Esto evita contar incendios terminados o boletines obsoletos como activos.
+  const alertasVigentes = filtrarAlertasVigentes(alerts);
+  const activeAlerts = alertasVigentes.length;
 
-  const activeIncidents = incidents.filter((i) => i.state !== 'cerrada').length;
+  // Incidentes activos: SOLO los que tienen estado 'activa' (no 'contenida',
+  // 'controlada' ni 'cerrada'). Los incidentes 'contenida'/'controlada' son
+  // eventos que ya se resolvieron y NO deben contarse como emergencias vivas.
+  const activeIncidents = incidents.filter((i) => i.state === 'activa').length;
 
   // Fichas críticas + altas
   const fichasCriticasAltas = apiStats
@@ -68,7 +73,7 @@ export function StatsOverview({
       id: 'active-alerts',
       label: 'Alertas Activas',
       value: activeAlerts,
-      sublabel: `de ${stats?.total ?? 0} en buffer WS`,
+      sublabel: `vigentes de ${alerts.length} en buffer WS`,
       Icon: AlertOctagon,
       iconColor: 'text-sev-critical',
       bgIcon: 'bg-sev-critical/10',
@@ -79,9 +84,11 @@ export function StatsOverview({
       id: 'active-incidents',
       label: 'Incidentes Activos',
       value: incidentsLoading ? null : activeIncidents,
-      sublabel: `de ${incidents.length} registrados`,
+      sublabel: activeIncidents === 0
+        ? 'Nivel 0 (Normalidad) — Panel Depurado'
+        : `hoy en Viña del Mar de ${incidents.length} registrados`,
       Icon: Flame,
-      iconColor: 'text-sev-warning',
+      iconColor: activeIncidents === 0 ? 'text-emerald-600' : 'text-sev-warning',
       bgIcon: 'bg-sev-warning/10',
       trend: '+',
       trendColor: 'text-muted-foreground',

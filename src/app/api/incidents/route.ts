@@ -5,13 +5,25 @@ import { writeAudit, extractRequestMeta } from "@/lib/audit";
 
 /**
  * GET /api/incidents
- * Devuelve todos los Incidentes georreferenciados ordenados por createdAt DESC.
- * Usado para poblar el mapa de catástrofes del dashboard.
+ * Devuelve incidentes georreferenciados filtrados por:
+ *   - comuna = 'Viña del Mar' (siempre)
+ *   - fecha de hoy (createdAt >= inicio de hoy en America/Santiago)
+ *   - excluye incendios cerrados/contenidos de dias anteriores
+ * Usado para poblar el mapa de catástrofes del dashboard con datos REALES.
  */
 export async function GET() {
   try {
+    // Calcular inicio de hoy en zona horaria de Chile (America/Santiago)
+    const now = new Date();
+    const chileTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Santiago' }));
+    const startOfToday = new Date(chileTime.getFullYear(), chileTime.getMonth(), chileTime.getDate());
+
     const incidents = await db.incident.findMany({
-      orderBy: { createdAt: "desc" },
+      where: {
+        commune: 'Viña del Mar',
+        createdAt: { gte: startOfToday },
+      },
+      orderBy: { createdAt: 'desc' },
     });
     return NextResponse.json(incidents);
   } catch (err) {

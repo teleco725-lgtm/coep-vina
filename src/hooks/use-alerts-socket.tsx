@@ -47,23 +47,46 @@ interface AlertsStore {
   reset: () => void;
 }
 
-const MAX_ALERTS = 200;
+// Limite del store: 50 alertas (antes 200, acumulaba ruido con el tiempo).
+// El pipeline TTL del cliente filtra las que exceden el umbral temporal,
+// asi que 50 es suficiente para ver las vigentes sin llenar de falsos.
+const MAX_ALERTS = 50;
 
 const useAlertsStore = create<AlertsStore>((set) => ({
   alerts: [],
   stats: null,
   status: 'connecting',
   unreadCount: 0,
-  setAlerts: (a) => set({ alerts: a.slice(0, MAX_ALERTS) }),
+  setAlerts: (a) =>
+    set(() => {
+      // Eliminar duplicados por id (por si el server reenvia alertas ya en el
+      // historial al reconectar el socket).
+      const seen = new Set<string>();
+      const unique = a.filter((x) => {
+        if (seen.has(x.id)) return false;
+        seen.add(x.id);
+        return true;
+      });
+      return { alerts: unique.slice(0, MAX_ALERTS) };
+    }),
   prependAlert: (a) =>
-    set((state) => ({
-      alerts: [a, ...state.alerts].slice(0, MAX_ALERTS),
-      // Solo las alertas VERIFICadas (verdaderas) incrementan el contador de
-      // la campana. Los rumores (verified=false) se acumulan en la lista pero
-      // no generan notificación visible para no molestar al operador con
-      // reportes no confirmados.
-      unreadCount: a.verified === false ? state.unreadCount : state.unreadCount + 1,
-    })),
+    set((state) => {
+      // Evitar duplicados: si la alerta ya existe (mismo id), no la añadimos.
+      // Esto puede pasar cuando el socket reconecta y el server reenvia el
+      // historial, o cuando el server retransmite la misma alerta.
+      if (state.alerts.some((x) => x.id === a.id)) {
+        return state;
+      }
+      return {
+        alerts: [a, ...state.alerts].slice(0, MAX_ALERTS),
+        // Solo las alertas VERIFICadas (verdaderas) incrementan el contador de
+        // la campana. Los rumores (verified=false) se acumulan en la lista pero
+        // no generan notificación visible para no molestar al operador con
+        // reportes no confirmados.
+        unreadCount:
+          a.verified === false ? state.unreadCount : state.unreadCount + 1,
+      };
+    }),
   setStats: (s) => set({ stats: s }),
   setStatus: (s) => set({ status: s }),
   markAllRead: () => set({ unreadCount: 0 }),
@@ -118,16 +141,29 @@ let sharedSocket: Socket | null = null;
 let sharedRefCount = 0;
 
 function getSocket(): Socket {
-  if (sharedSocket) return sharedSocket;
-  // IMPORTANTE: la conexión debe ir al path '/' y llevar XTransformPort
-  // en la query string para que el gateway Caddy lo reenvíe al puerto 3003.
+  // Si ya existe un sharedSocket Y está conectado, lo reutilizamos.
+  // Si existe pero NO está conectado (estado roto por HMR o gateway),
+  // lo desconectamos y creamos uno nuevo.
+  if (sharedSocket) {
+    if (sharedSocket.connected) return sharedSocket;
+    try {
+      sharedSocket.disconnect();
+    } catch {
+      /* ignore */
+    }
+    sharedSocket = null;
+  }
   sharedSocket = io('/', {
-    transports: ['websocket'],
+    // Polling como fallback: el gateway Caddy a veces no maneja bien el
+    // upgrade a WebSocket. Socket.io hace upgrade automático cuando es posible.
+    transports: ['polling', 'websocket'],
     query: { XTransformPort: '3003' },
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1500,
     reconnectionDelayMax: 10000,
+    // Forzar reconexión inmediata si el socket se desconecta.
+    forceNew: true,
   });
   return sharedSocket;
 }
@@ -163,9 +199,17 @@ export function useAlertsSocket(): {
     sharedRefCount += 1;
     setStatus(socket.connected ? 'connected' : 'connecting');
 
-    const onConnect = () => setStatus('connected');
+    const onConnect = () => {
+      setStatus('connected');
+      // Pedir el historial al conectar (o reconectar) para que el cliente
+      // tenga los datos más recientes incluso si el ClientOnly monta tarde.
+      socket.emit('requestHistory');
+    };
     const onDisconnect = () => setStatus('disconnected');
     const onHistory = (data: BroadcastAlert[]) => {
+      // Si recibimos el history, estamos conectados (incluso si el evento
+      // 'connect' no se disparó por problemas con el gateway Caddy).
+      setStatus('connected');
       if (Array.isArray(data)) {
         setAlerts(data);
       }
@@ -194,10 +238,79 @@ export function useAlertsSocket(): {
     socket.on('alert', onAlert);
     socket.on('stats', onStats);
 
-    // Si el socket ya estaba conectado al montar, forzamos el estado.
-    if (socket.connected) setStatus('connected');
+    // Si el socket ya estaba conectado al montar (sharedSocket reutilizado),
+    // forzamos el estado y pedimos el historial explícitamente.
+    if (socket.connected) {
+      setStatus('connected');
+      socket.emit('requestHistory');
+    }
+
+    // Safety net: poll del estado del socket cada 2s. Si el socket se
+    // conecta después de que el hook se montó (ClientOnly retrasa el
+    // montaje), el evento 'connect' puede haber pasado antes de registrar
+    // el listener. Este polling asegura que el estado se sincronice.
+    const statusInterval = setInterval(() => {
+      if (socket.connected) {
+        setStatus('connected');
+        socket.emit('requestHistory');
+      }
+    }, 2000);
+
+    // Safety net: si el socket no conecta en 5 segundos, activar SSE fallback.
+    // Esto hace que el dashboard funcione en Vercel (serverless) donde no hay
+    // WebSocket. El SSE (Server-Sent Events) si funciona en Vercel.
+    let sseFallback: EventSource | null = null;
+    const sseTimeout = setTimeout(() => {
+      if (!socket.connected) {
+        // WebSocket no conecto — activar SSE fallback
+        sseFallback = new EventSource('/api/alerts-stream');
+
+        sseFallback.addEventListener('history', (e) => {
+          setStatus('connected');
+          try {
+            const data = JSON.parse((e as MessageEvent).data) as BroadcastAlert[];
+            if (Array.isArray(data)) setAlerts(data);
+          } catch {}
+        });
+
+        sseFallback.addEventListener('alert', (e) => {
+          setStatus('connected');
+          try {
+            const alert = JSON.parse((e as MessageEvent).data) as BroadcastAlert;
+            if (alert && alert.id) {
+              prependAlert(alert);
+              if (alert.severity === 'critical') {
+                void ensureNotificationPermission();
+                void notifyServiceWorker(alert);
+              }
+            }
+          } catch {}
+        });
+
+        sseFallback.addEventListener('stats', (e) => {
+          try {
+            const s = JSON.parse((e as MessageEvent).data) as Stats;
+            if (s) setStats(s);
+          } catch {}
+        });
+
+        sseFallback.onerror = () => {
+          // SSE cerrado — marcar desconectado
+          setStatus('disconnected');
+        };
+
+        console.log('[alerts] WebSocket fallo — activando SSE fallback');
+      }
+    }, 5000);
 
     return () => {
+      clearTimeout(connectTimeout);
+      clearTimeout(sseTimeout);
+      clearInterval(statusInterval);
+      if (sseFallback) {
+        sseFallback.close();
+        sseFallback = null;
+      }
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
       socket.off('history', onHistory);

@@ -179,13 +179,13 @@ export function IncidentMap({
 
             {/* Incidents */}
             {showIncidents &&
-              incidents.map((inc) => {
+              incidents.map((inc, idx) => {
                 const color = incidentTypeColor(inc.type);
                 const isCriticalActive =
                   inc.severity === 'critical' && inc.state === 'activa';
                 return (
                   <Circle
-                    key={inc.id}
+                    key={`inc-${idx}-${inc.id}`}
                     center={[inc.lat, inc.lng]}
                     radius={Math.max(50, inc.radiusMeters || 500)}
                     pathOptions={{
@@ -255,9 +255,9 @@ export function IncidentMap({
             {showIncidents &&
               incidents
                 .filter((i) => i.severity === 'critical' && i.state === 'activa')
-                .map((inc) => (
+                .map((inc, idx) => (
                   <CircleMarker
-                    key={`pulse-${inc.id}`}
+                    key={`pulse-${idx}-${inc.id}`}
                     center={[inc.lat, inc.lng]}
                     radius={10}
                     pathOptions={{
@@ -272,9 +272,9 @@ export function IncidentMap({
 
             {/* Live alerts overlay (small dots) */}
             {showLiveAlerts &&
-              liveAlerts.map((a) => (
+              liveAlerts.map((a, idx) => (
                 <CircleMarker
-                  key={`live-${a.id}`}
+                  key={`live-${idx}-${a.id}`}
                   center={[a.lat, a.lng]}
                   radius={4}
                   pathOptions={{

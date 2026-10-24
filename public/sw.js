@@ -37,8 +37,8 @@ function showNotify(payload) {
     const data = (payload && payload.data) || { url: '/' };
     return self.registration.showNotification(title, {
       body,
-      icon: '/logo.svg',
-      badge: '/logo.svg',
+      icon: '/logo.png',
+      badge: '/logo.png',
       tag,
       data,
       requireInteraction: !!(payload && payload.severity === 'critical'),

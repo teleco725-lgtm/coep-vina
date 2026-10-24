@@ -61,12 +61,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 import { StatsOverview } from '@/components/dashboard/stats-overview';
 import { LiveFeed } from '@/components/dashboard/live-feed';
+import { PipelineDepuracion } from '@/components/dashboard/pipeline-depuracion';
 import { ChartsPanel } from '@/components/dashboard/charts-panel';
 import { FichasPanel } from '@/components/dashboard/fichas-panel';
 import { CompliancePanel } from '@/components/dashboard/compliance-panel';
 import { IncidentFormDialog } from '@/components/dashboard/incident-form';
 
 import { useAlertsSocket, useRecentNotifications, useUnreadCount, useMarkAllRead } from '@/hooks/use-alerts-socket';
+import { filtrarAlertasVigentes } from '@/lib/pipeline-ttl';
 import type { Incident } from '@/lib/types';
 import {
   severityColor,
@@ -447,6 +449,14 @@ function ExportMenu() {
           <Presentation className="h-4 w-4 text-amber-600" />
           PowerPoint (.pptx)
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => window.open('/Instructivo_COEP_Vina.pdf', '_blank')}
+          className="gap-2"
+        >
+          <FileText className="h-4 w-4 text-primary" />
+          Instructivo de Uso (PDF)
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -478,19 +488,21 @@ function Dashboard() {
   });
 
   // Live alerts overlay for the map: ONLY verified (true) alerts with valid
-  // coords, newest 10. Las alertas falsas (rumores, verified=false) NO se
-  // muestran en el mapa para evitar confundir al operador con reportes no
-  // confirmados por una fuente oficial.
+  // coords, dentro del TTL (4h emergencias / 12h boletines), mismo día, y
+  // comuna Viña del Mar. Las alertas falsas/obsoletas NO se muestran en el
+  // mapa — el pipeline TTL las descarta automáticamente.
   const liveMapAlerts = useMemo(() => {
-    return alerts
-      .filter(
-        (a) =>
-          a.verified !== false && // <-- SOLO alertas verdaderas (verificadas)
-          typeof a.lat === 'number' &&
-          typeof a.lng === 'number' &&
-          !Number.isNaN(a.lat) &&
-          !Number.isNaN(a.lng),
-      )
+    const vigentes = filtrarAlertasVigentes(alerts);
+    const seen = new Set<string>();
+    return vigentes
+      .filter((a) => {
+        if (a.verified === false) return false; // <-- SOLO verdaderas
+        if (typeof a.lat !== 'number' || typeof a.lng !== 'number') return false;
+        if (Number.isNaN(a.lat) || Number.isNaN(a.lng)) return false;
+        if (seen.has(a.id)) return false; // <-- dedup por id
+        seen.add(a.id);
+        return true;
+      })
       .slice(0, 10)
       .map((a) => ({
         id: a.id,
@@ -518,9 +530,9 @@ function Dashboard() {
           {/* Logo + title */}
           <div className="flex items-center gap-3">
             <img
-              src="/logo.svg"
+              src="/logo.png"
               alt="Escudo institucional COEP Viña"
-              className="h-10 w-10 shrink-0"
+              className="h-10 w-10 shrink-0 rounded-md object-cover"
             />
             <div className="flex flex-col leading-tight">
               <h1 className="text-sm font-bold text-foreground sm:text-base">
@@ -598,6 +610,9 @@ function Dashboard() {
               <LiveFeed />
             </div>
           </div>
+
+          {/* Row 2.5: Pipeline de Depuración (filtrado TTL automático) */}
+          <PipelineDepuracion />
 
           {/* Row 3: Fichas + Charts */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-6">
@@ -681,7 +696,7 @@ function ClientOnly({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen flex-col">
         <header className="glass sticky top-0 z-30 border-b backdrop-blur">
           <div className="mx-auto flex max-w-screen-2xl items-center gap-3 px-4 py-3 sm:px-6">
-            <img src="/logo.svg" alt="Escudo institucional" className="h-10 w-10 shrink-0" />
+            <img src="/logo.png" alt="Escudo institucional" className="h-10 w-10 shrink-0 rounded-md object-cover" />
             <div className="flex flex-col leading-tight">
               <h1 className="text-sm font-bold text-foreground sm:text-base">
                 COEP Viña · Centro de Operaciones de Emergencia Provincial
