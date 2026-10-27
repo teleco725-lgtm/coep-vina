@@ -138,3 +138,46 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+/// Directorio de Salud de Viña del Mar — dato estático fijo (no tiempo real)
+/// Verificar vigencia trimestralmente. No requiere fecha de hoy.
+model CentroSalud {
+  id            String   @id @default(cuid())
+  nombre        String
+  tipo          String   // hospital | cesfam | clinica | sapu | cecosf | megasalud | ambulancia
+  telefono      String
+  direccion     String?
+  comuna        String   @default("Viña del Mar")
+  ultimaVerificacion DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([comuna])
+  @@index([tipo])
+}
+
+/// Registro manual de alertas confirmadas por operador
+/// Para fuentes que no se pueden automatizar (Bomberos, Carabineros, Municipalidad, Chilquinta, SHOA, SENAPRED)
+model AlertaManual {
+  id            String   @id @default(cuid())
+  fuente        String   // senapred | shoa | cbv2 | carabineros | chilquinta | munivina
+  titulo        String
+  descripcion   String?
+  categoria     String   // sismo | inundacion | corte_luz | accidente | delito | otro
+  severidad     String   @default("info") // info | watch | warning | critical
+  estado        String   @default("activa") // activa | cerrada
+  comuna        String   @default("Viña del Mar")
+  lat           Float?
+  lng           Float?
+  urlFuente     String?  // URL de donde se saco la info
+  operador      String   // nombre de quien confirmo
+  confirmadoEn  DateTime @default(now()) // fecha/hora de confirmacion manual
+  fechaEvento   DateTime // fecha/hora del evento real (de la fuente)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  closedAt      DateTime?
+
+  @@index([fuente])
+  @@index([estado])
+  @@index([fechaEvento])
+}
