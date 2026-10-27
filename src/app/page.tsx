@@ -62,6 +62,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { StatsOverview } from '@/components/dashboard/stats-overview';
 import { LiveFeed } from '@/components/dashboard/live-feed';
 import { PipelineDepuracion } from '@/components/dashboard/pipeline-depuracion';
+import { PanelCargaManual } from '@/components/dashboard/panel-carga-manual';
+import { PanelDirectorioSalud } from '@/components/dashboard/panel-directorio-salud';
 import { ChartsPanel } from '@/components/dashboard/charts-panel';
 import { FichasPanel } from '@/components/dashboard/fichas-panel';
 import { CompliancePanel } from '@/components/dashboard/compliance-panel';
@@ -627,7 +629,17 @@ function Dashboard() {
             </div>
           </div>
 
-          {/* Row 4: Compliance */}
+          {/* Row 4: Carga Manual + Directorio de Salud */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-6">
+            <div className="lg:col-span-7">
+              <PanelCargaManual />
+            </div>
+            <div className="lg:col-span-5">
+              <PanelDirectorioSalud />
+            </div>
+          </div>
+
+          {/* Row 5: Compliance */}
           <CompliancePanel />
 
           {/* Hidden trigger to refresh incidents when a new one is registered */}
