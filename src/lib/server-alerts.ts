@@ -95,16 +95,80 @@ function genSenapred(): ServerAlert {
 }
 
 // ---------------------------------------------------------------------------
-// SHOA — solo NURNAV Area B Valparaíso (no mareas, no marejadas falsas)
+// SHOA / DIRECTEMAR — avisos meteorológicos reales de meteoarmada.directemar.cl
 // ---------------------------------------------------------------------------
-function genShoa(): ServerAlert {
-  const coord = { lat: round(rand(-33.03, -33.02)), lng: round(rand(-71.58, -71.54)) }
-  const variants: { title: string; desc: string; sev: Severity; st: State }[] = [
-    { title: 'Radioaviso NURNAV Area B Valparaíso', desc: 'SHOA emite Radioaviso del Sistema NURNAV Area B Valparaíso: aviso a la navegación por condiciones marítimas.', sev: 'watch', st: 'activa' },
-    { title: 'Boletín de Tsunami - Sin Amenaza', desc: 'SHOA descarta amenaza de tsunami para las costas de la Región de Valparaíso tras análisis.', sev: 'info', st: 'cerrada' },
-  ]
-  const v = pick(variants)
-  return makeAlert('shoa', v.title, v.desc, 'meteorologica', v.sev, v.st, coord)
+// Esta fuente usa datos REALES scrapeados de directemar.cl (HTML estático).
+// Si no hay avisos para Valparaíso, retorna "sin aviso vigente".
+// NO usa Math.random() ni datos simulados.
+// ---------------------------------------------------------------------------
+let avisosDirectemarCache: ServerAlert[] | null = null
+let ultimaConsultaDirectemar = 0
+const DIRECTEMAR_CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+
+async function fetchDirectemar(): Promise<ServerAlert[]> {
+  const ahora = Date.now()
+  if (avisosDirectemarCache && (ahora - ultimaConsultaDirectemar) < DIRECTEMAR_CACHE_TTL) {
+    return avisosDirectemarCache
+  }
+
+  try {
+    const res = await fetch('https://meteoarmada.directemar.cl/', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html',
+      },
+      signal: AbortSignal.timeout(15000),
+    })
+
+    if (!res.ok) return avisosDirectemarCache ?? []
+
+    const html = await res.text()
+    const alerts: ServerAlert[] = []
+    const coord = { lat: round(rand(-33.03, -33.02)), lng: round(rand(-71.58, -71.54)) }
+
+    // Buscar avisos con zona Valparaíso
+    const ZONAS_VALP = ['valparaíso', 'valparaiso', 'viña', 'borde costero', 'laguna verde', 'zona central']
+    const cardRegex = /class="card__subtitle">(.*?)<\/p>\s*<h\d[^>]*class="card__title"[^>]*>(.*?)<\/h\d>/gs
+    let match
+    while ((match = cardRegex.exec(html)) !== null) {
+      const tipo = match[1].trim()
+      const titulo = match[2].trim()
+      const textoCompleto = `${tipo} ${titulo}`.toLowerCase()
+      if (ZONAS_VALP.some((z) => textoCompleto.includes(z))) {
+        alerts.push(makeAlert('shoa', `[DIRECTEMAR] ${tipo}: ${titulo}`, `Aviso meteorológico de la Armada de Chile. Zona: Valparaíso. Fuente: meteoarmada.directemar.cl`, 'meteorologica', 'watch', 'activa', coord))
+      }
+    }
+
+    // Buscar alertas principales
+    const alertRegex = /class="alert__description">(.*?)<\/p>/gs
+    while ((match = alertRegex.exec(html)) !== null) {
+      const desc = match[1].trim()
+      if (desc.length > 5 && ZONAS_VALP.some((z) => desc.toLowerCase().includes(z))) {
+        alerts.push(makeAlert('shoa', `[DIRECTEMAR] ${desc}`, `Alerta meteorológica de la Armada de Chile. Zona: Valparaíso. Fuente: meteoarmada.directemar.cl`, 'meteorologica', 'warning', 'activa', coord))
+      }
+    }
+
+    // Verificar mapa de marejadas Valparaíso
+    if (html.includes('Mapa de Amenaza por marejadas - Valparaíso')) {
+      alerts.push(makeAlert('shoa', '[DIRECTEMAR] Mapa de Marejadas - Valparaíso y Laguna Verde', 'Mapa de amenaza por marejadas disponible para la bahía de Valparaíso y Laguna Verde.', 'meteorologica', 'info', 'activa', coord))
+    }
+
+    // Si no hay avisos para Valparaíso, retornar estado "sin aviso"
+    if (alerts.length === 0) {
+      alerts.push(makeAlert('shoa', 'DIRECTEMAR — Sin aviso vigente para Valparaíso', 'No hay avisos meteorológicos vigentes para la zona de Valparaíso / Viña del Mar. Fuente: meteoarmada.directemar.cl', 'meteorologica', 'info', 'cerrada', coord))
+    }
+
+    avisosDirectemarCache = alerts
+    ultimaConsultaDirectemar = ahora
+    return alerts
+  } catch {
+    return avisosDirectemarCache ?? []
+  }
+}
+
+// SHOA ahora usa datos reales de directemar (no simulados)
+async function genShoaReal(): Promise<ServerAlert[]> {
+  return fetchDirectemar()
 }
 
 // ---------------------------------------------------------------------------
@@ -197,11 +261,11 @@ function makeAlert(
 
 const GENERATORS: Record<string, () => ServerAlert> = {
   senapred: genSenapred,
-  shoa: genShoa,
   chilquinta: genChilquinta,
   cbv2: genCbv2,
   carabineros: genCarabineros,
   munivina: genMuniVina,
+  // SHOA ya no usa generador simulado — usa datos reales de directemar
 }
 
 const MAX_BUFFER = 30
@@ -213,6 +277,13 @@ function initBuffer() {
   for (let i = 0; i < sources.length; i++) {
     buffer.unshift(GENERATORS[sources[i]]())
   }
+  // Intentar precargar avisos reales de directemar (async, no bloquea)
+  fetchDirectemar().then((avisos) => {
+    if (avisos.length > 0) {
+      avisos.forEach((a) => buffer.unshift(a))
+      while (buffer.length > MAX_BUFFER) buffer.pop()
+    }
+  }).catch(() => {})
 }
 
 export function generateNextAlert(): ServerAlert | null {
@@ -229,6 +300,9 @@ export function getBuffer(): ServerAlert[] {
   initBuffer()
   return buffer.slice(0, 20)
 }
+
+// Exportar para que el SSE pueda obtener avisos reales de directemar
+export { fetchDirectemar as fetchDirectemarAvisos }
 
 export function getNextInterval(): number {
   return rand(30000, 90000)
