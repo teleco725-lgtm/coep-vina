@@ -64,9 +64,7 @@ export async function GET(req: Request) {
       orderBy: { updatedAt: "desc" },
     });
 
-    // Ordenamiento por prioridad de riesgo (SQLite no soporta orderBy con CASE
-    // directamente a través de Prisma sin raw SQL; ordenamos en JS, que para
-    // volúmenes de fichas de emergencia es trivial).
+    // Ordenamiento por prioridad de riesgo
     fichas.sort((a, b) => {
       const pa = RISK_PRIORITY[a.riskLevel] ?? 99;
       const pb = RISK_PRIORITY[b.riskLevel] ?? 99;
@@ -74,7 +72,17 @@ export async function GET(req: Request) {
       return b.updatedAt.getTime() - a.updatedAt.getTime();
     });
 
-    return NextResponse.json(fichas.slice(0, limit));
+    // H1: Enmascarar datos sensibles en el listado GET (Ley 19.628 art. 2)
+    // El listado no debe exponer RUT, telefono ni email completos.
+    // Solo el detalle GET /api/fichas/[id] retorna datos completos.
+    const fichasEnmascaradas = fichas.slice(0, limit).map((f) => ({
+      ...f,
+      rut: f.rut ? `${f.rut.slice(0, 4)}.XXX.XXX-X` : null,
+      phone: f.phone ? '********' : null,
+      email: f.email ? '***@***' : null,
+    }));
+
+    return NextResponse.json(fichasEnmascaradas);
   } catch (err) {
     console.error("[api/fichas] GET error:", err);
     return NextResponse.json([], { status: 200 });

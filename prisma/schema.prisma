@@ -105,6 +105,14 @@ model FichaFIBER {
   status          String   @default("registrada") // registrada | evaluada | derivada | cerrada
   notes           String?
   assignedTo      String? // profesional responsable
+  // H9: Consentimiento Ley 19.628 art. 4 — el titular debe dar consentimiento
+  // para el tratamiento de sus datos personales en fichas de emergencia.
+  consentimiento  Boolean  @default(false)
+  fechaConsentimiento DateTime?
+  // H10: Política de retención — la ficha se conserva mientras dure la
+  // emergencia + 5 años (estándar SENAPRED). El campo retencionHasta
+  // indica la fecha límite.
+  retencionHasta  DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

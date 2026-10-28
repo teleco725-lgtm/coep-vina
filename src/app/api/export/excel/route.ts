@@ -283,6 +283,29 @@ export async function GET() {
       'Cumplimiento Legal',
     );
 
+    // H6: Sheet 6 — Nota de Confidencialidad (Ley 19.628)
+    const confidencialRows: (string | number)[][] = [
+      ['DOCUMENTO CONFIDENCIAL — USO INTERNO COEP VIÑA'],
+      [''],
+      ['Ley 19.628 — Protección de Datos de Carácter Personal'],
+      ['Este documento contiene datos sensibles (RUT, teléfono, dirección, salud)'],
+      ['de personas vulnerables registradas en fichas FIBER.'],
+      [''],
+      ['El acceso está restringido al personal autorizado del COEP Viña.'],
+      ['La distribución externa requiere autorización expresa.'],
+      [''],
+      ['Fecha de generación:', data.generatedAt.toISOString()],
+      ['Generado por:', 'Sistema COEP Viña · VeltrixIntegra Ecosistema Digital 360'],
+      [''],
+      ['Política de retención:', 'Fichas FIBER: emergencia + 5 años. Audit logs: 2 años.'],
+      ['Trazabilidad:', 'Toda acción queda registrada en bitácora de auditoría.'],
+    ];
+    XLSX.utils.book_append_sheet(
+      wb,
+      buildSheet(confidencialRows, { freeze: false }),
+      'Confidencialidad',
+    );
+
     // ----- Write to buffer -----
     const buf = XLSX.write(wb, {
       type: 'buffer',

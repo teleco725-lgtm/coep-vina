@@ -14,7 +14,19 @@ import type { ServerAlert } from '@/lib/server-alerts'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
+  // H7: Validar origen — rechazar conexiones de dominios no autorizados
+  const origen = req.headers.get('origin') || req.headers.get('referer') || '';
+  const dominiosPermitidos = [
+    'localhost',
+    'coep-vina.vercel.app',
+    'space-z.ai',
+  ];
+  // Si tiene origen y no coincide con ninguno permitido, rechazar
+  if (origen && !dominiosPermitidos.some(d => origen.includes(d))) {
+    return new Response('Origen no autorizado', { status: 403 });
+  }
+
   const encoder = new TextEncoder()
 
   const stream = new ReadableStream({

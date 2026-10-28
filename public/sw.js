@@ -51,7 +51,23 @@ function showNotify(payload) {
 // Mensaje desde la página: la pestaña envía alertas críticas para que el SW
 // dispare una notificación nativa (incluso si la pestaña pasa a background
 // poco después, la notificación ya está encolada en el SO).
+// H8: Validar origen del postMessage — solo aceptar del propio dominio
+// Evita que paginas maliciosas envien notificaciones falsas (ISO 27001 A.13.1)
+const ORIGENES_SW_PERMITIDOS = [
+  'http://localhost:3000',
+  'http://localhost:81',
+  'https://coep-vina.vercel.app',
+  'https://preview-chat-33b01503-823a-4261-a23e-8d57244c30e2.space-z.ai',
+];
+
 self.addEventListener('message', (event) => {
+  // H8: Validar origen antes de procesar
+  const origen = event.origin || '';
+  const permitido = ORIGENES_SW_PERMITIDOS.some((o) => origen.startsWith(o)) || origen === '';
+  if (!permitido) {
+    console.warn('[SW] Origen no autorizado:', origen);
+    return;
+  }
   const msg = event && event.data;
   if (!msg) return;
   if (msg.type === 'NOTIFY' && msg.payload) {
