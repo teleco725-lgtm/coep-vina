@@ -5,7 +5,7 @@ import { writeAudit, extractRequestMeta } from "@/lib/audit";
 
 /**
  * GET /api/fichas/[id]
- * Devuelve una ficha FIBER puntual por id.
+ * Devuelve una ficha de registro operativo puntual por id.
  */
 export async function GET(
   _req: Request,

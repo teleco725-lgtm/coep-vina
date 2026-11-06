@@ -95,7 +95,7 @@ export function StatsOverview({
     },
     {
       id: 'fichas-criticas',
-      label: 'Fichas FIBER Críticas/Altas',
+      label: 'Fichas Operativas Críticas/Altas',
       value: apiStats ? fichasCriticasAltas : null,
       sublabel: `de ${apiStats?.fichas.total ?? 0} fichas`,
       Icon: Users,

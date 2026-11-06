@@ -67,11 +67,11 @@ export async function GET() {
     ],
     dataProtection: [
       {
-        id: "ley19628",
-        name: "Ley 19.628 - Protección de Datos de Carácter Personal",
+        id: "ley1209272",
+        name: "Ley 21.726 - Protección de Datos Personales",
         description:
-          "Establece el tratamiento de datos personales en Chile. Obliga al responsable a garantizar confidencialidad, finalidad y seguridad de los datos (art. 2). Las fichas FIBER, al contener datos sensibles (salud, ubicación, RUT), requieren consentimiento informado y resguardo.",
-        url: "https://www.bcn.cl/leychile/navegar?idNorma=141599",
+          "Ley sobre protección de datos de carácter personal. Obliga al responsable a garantizar confidencialidad, finalidad y seguridad de los datos. Las fichas de registro operativo, al contener datos sensibles (salud, ubicación, RUT), requieren consentimiento informado y resguardo.",
+        url: "https://www.bcn.cl/leychile/navegar?idNorma=1209272",
       },
       {
         id: "ley21099",
@@ -84,8 +84,8 @@ export async function GET() {
         id: "ley21519",
         name: "Ley 21.519 - Marco de Ciberseguridad de Chile",
         description:
-          "Crea la Agencia Nacional de Ciberseguridad (ANCI) y define obligadores para servicios esenciales. Un sistema de emergencias comunales se considera servicio esencial y debe reportar incidentes de ciberseguridad.",
-        url: "https://www.bcn.cl/leychile/navegar?idNorma=1201261",
+          "Crea la Agencia Nacional de Ciberseguridad (ANCI) y define obligaciones para servicios esenciales. Un sistema de emergencias comunales se considera servicio esencial.",
+        url: "https://www.bcn.cl/leychile/navegar?idNorma=1202434",
       },
     ],
     cybersecurity: [
@@ -141,11 +141,11 @@ export async function GET() {
         url: "https://www.senapred.cl",
       },
       {
-        id: "ley18243",
+        id: "ley1036936",
         name: "Ley 18.243 - Cuerpo de Bomberos",
         description:
           "Norma que regula la organización y funcionamiento del Cuerpo de Bomberos. Marco para el registro de incidentes atendidos por CBV2.",
-        url: "https://www.bcn.cl/leychile/navegar?idNorma=29488",
+        url: "https://www.bcn.cl/leychile/navegar?idNorma=1036936",
       },
     ],
     dataHandling: {
@@ -158,16 +158,18 @@ export async function GET() {
         "Trazabilidad",
       ],
       retention:
-        "Las fichas FIBER se conservan mientras dure la emergencia + 5 años (estándar SENAPRED)",
+        "Las fichas de registro operativo se conservan mientras dure la emergencia + 5 años (estándar SENAPRED)",
       encryption:
-        "Cifrado en tránsito (TLS) y en reposo (SQLite con acceso restringido)",
+        "Cifrado en tránsito (TLS) y en reposo (Neon PostgreSQL con acceso restringido)",
       audit:
-        "Toda acción sobre fichas, alertas e incidentes se registra en AuditLog (Ley 19.628 art. 2)",
-      backup: "Respaldo diario incremental y mensual completo de la base local",
+        "Toda acción sobre fichas, alertas e incidentes se registra en AuditLog (Ley de Protección de Datos Personales art. 2)",
+      backup: "Respaldo diario incremental y mensual completo en Neon PostgreSQL",
       access:
-        "Acceso basado en roles (admin / supervisor / operador) — Ley 19.628 art. 4. Gestión de credenciales bajo control del administrador del sistema.",
+        "Acceso basado en roles (admin / supervisor / operador). Gestión de credenciales bajo control del administrador del sistema.",
       consent:
-        "El registro de una ficha FIBER implica consentimiento informado del titular para uso en gestión de emergencias (Ley 19.628).",
+        "El registro de una ficha de registro operativo implica consentimiento informado del titular para uso en gestión de emergencias.",
+      denuncia: "Denunciar irregularidades: http://denunciasfibe.cl/",
+      validacion: "Validar ficha: https://mifibe.gob.cl/",
     },
   };
 

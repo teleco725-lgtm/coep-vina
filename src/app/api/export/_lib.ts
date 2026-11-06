@@ -71,9 +71,9 @@ export const COMPLIANCE_PAYLOAD: ComplianceData = {
   dataProtection: [
     {
       id: 'ley19628',
-      name: 'Ley 19.628 - Protección de Datos de Carácter Personal',
+      name: 'Ley de Protección de Datos Personales - Protección de Datos de Carácter Personal',
       description:
-        'Establece el tratamiento de datos personales en Chile. Obliga al responsable a garantizar confidencialidad, finalidad y seguridad de los datos (art. 2). Las fichas FIBER, al contener datos sensibles (salud, ubicación, RUT), requieren consentimiento informado y resguardo.',
+        'Establece el tratamiento de datos personales en Chile. Obliga al responsable a garantizar confidencialidad, finalidad y seguridad de los datos (art. 2). Las fichas de registro operativo, al contener datos sensibles (salud, ubicación, RUT), requieren consentimiento informado y resguardo.',
       url: 'https://www.bcn.cl/leychile/navegar?idNorma=141599',
     },
     {
@@ -87,7 +87,7 @@ export const COMPLIANCE_PAYLOAD: ComplianceData = {
       id: 'ley21519',
       name: 'Ley 21.519 - Marco de Ciberseguridad de Chile',
       description:
-        'Crea la Agencia Nacional de Ciberseguridad (ANCI) y define obligadores para servicios esenciales. Un sistema de emergencias comunales se considera servicio esencial y debe reportar incidentes de ciberseguridad.',
+        'Crea la Agencia Nacional de Ciberseguridad (ANCI) y define obligaciones para servicios esenciales. Un sistema de emergencias comunales se considera servicio esencial y debe reportar incidentes de ciberseguridad.',
       url: 'https://www.bcn.cl/leychile/navegar?idNorma=1201261',
     },
   ],
@@ -161,16 +161,18 @@ export const COMPLIANCE_PAYLOAD: ComplianceData = {
       'Trazabilidad',
     ],
     retention:
-      'Las fichas FIBER se conservan mientras dure la emergencia + 5 años (estándar SENAPRED)',
+      'Las fichas de registro operativo se conservan mientras dure la emergencia + 5 años (estándar SENAPRED)',
     encryption:
       'Cifrado en tránsito (TLS) y en reposo (SQLite con acceso restringido)',
     audit:
-      'Toda acción sobre fichas, alertas e incidentes se registra en AuditLog (Ley 19.628 art. 2)',
-    backup: 'Respaldo diario incremental y mensual completo de la base local',
+      'Toda acción sobre fichas, alertas e incidentes se registra en AuditLog (Ley de Protección de Datos Personales art. 2)',
+    backup: 'Respaldo diario incremental y mensual completo en Neon PostgreSQL',
     access:
-      'Acceso basado en roles (admin / supervisor / operador) — Ley 19.628 art. 4.',
+      'Acceso basado en roles (admin / supervisor / operador). Gestión de credenciales bajo control del administrador del sistema.',
     consent:
-      'El registro de una ficha FIBER implica consentimiento informado del titular para uso en gestión de emergencias (Ley 19.628).',
+      'El registro de una ficha de registro operativo implica consentimiento informado del titular para uso en gestión de emergencias.',
+    denuncia: 'Denunciar irregularidades: http://denunciasfibe.cl/',
+    validacion: 'Validar ficha: https://mifibe.gob.cl/',
   },
 };
 
@@ -491,7 +493,7 @@ export function buildResumenEjecutivo(data: ExportData): string[] {
   );
 
   paragraphs.push(
-    `En paralelo, el sistema mantiene ${data.fichas.length} fichas FIBER (registro de personas en situación de riesgo o vulnerabilidad) para la comuna. De ellas, ${fichasCriticas.length} están marcadas como riesgo crítico o alto y son prioridad para seguimiento y derivación. El cumplimiento normativo (SENAPRED, Ley 19.628 sobre datos personales, Ley 21.519 de ciberseguridad) se mantiene al día, con trazabilidad de cada acción en la bitácora de auditoría.`,
+    `En paralelo, el sistema mantiene ${data.fichas.length} fichas de registro operativo (registro de personas en situación de riesgo o vulnerabilidad) para la comuna. De ellas, ${fichasCriticas.length} están marcadas como riesgo crítico o alto y son prioridad para seguimiento y derivación. El cumplimiento normativo (SENAPRED, Ley de Protección de Datos Personales sobre datos personales, Marco de Ciberseguridad) se mantiene al día, con trazabilidad de cada acción en la bitácora de auditoría.`,
   );
 
   return paragraphs;
@@ -518,11 +520,11 @@ export function buildRecomendaciones(data: ExportData): string[] {
 
   if (fichasCriticas.length > 0) {
     recs.push(
-      `Priorizar el contacto y seguimiento de las ${fichasCriticas.length} fichas FIBER con riesgo crítico o alto. Confirmar telefonía, contactos de emergencia y necesidades de medicación o movilidad.`,
+      `Priorizar el contacto y seguimiento de las ${fichasCriticas.length} fichas de registro operativo con riesgo crítico o alto. Confirmar telefonía, contactos de emergencia y necesidades de medicación o movilidad.`,
     );
   } else {
     recs.push(
-      'Revisar las fichas FIBER y completar los datos de contacto y necesidades de las personas registradas, especialmente en sectores costeros y quebradas.',
+      'Revisar las fichas de registro operativo y completar los datos de contacto y necesidades de las personas registradas, especialmente en sectores costeros y quebradas.',
     );
   }
 
@@ -537,7 +539,7 @@ export function buildRecomendaciones(data: ExportData): string[] {
   );
 
   recs.push(
-    'Reforzar la difusión del cumplimiento de la Ley 19.628 en el manejo de datos personales: cada nuevo ingreso o modificación de fichas e incidentes queda registrado en la bitácora de auditoría del sistema.',
+    'Reforzar la difusión del cumplimiento de la Ley de Protección de Datos Personales en el manejo de datos personales: cada nuevo ingreso o modificación de fichas e incidentes queda registrado en la bitácora de auditoría del sistema.',
   );
 
   return recs;

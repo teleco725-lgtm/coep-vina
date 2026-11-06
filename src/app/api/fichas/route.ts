@@ -33,7 +33,7 @@ const RISK_PRIORITY: Record<string, number> = {
 
 /**
  * GET /api/fichas
- * Devuelve fichas FIBER ordenadas por prioridad de riesgo (critico > alto > medio > bajo)
+ * Devuelve fichas de registro operativo ordenadas por prioridad de riesgo (critico > alto > medio > bajo)
  * y luego por updatedAt DESC.
  *
  * Query params:
@@ -187,7 +187,7 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("[api/fichas] POST error:", err);
     return NextResponse.json(
-      { error: "No se pudo crear la ficha FIBER" },
+      { error: "No se pudo crear la ficha de registro operativo" },
       { status: 500 }
     );
   }

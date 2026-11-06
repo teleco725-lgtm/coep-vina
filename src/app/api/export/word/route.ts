@@ -320,7 +320,7 @@ function buildDocument(data: ExportData): Document {
     ];
   });
   const fichasSection = [
-    heading('4. Personas en Riesgo (Fichas FIBER)', HeadingLevel.HEADING_1),
+    heading('4. Personas en Riesgo (Fichas de Registro Operativo)', HeadingLevel.HEADING_1),
     paragraph(
       'Registro de personas en situación de vulnerabilidad o riesgo. El nivel de riesgo se interpreta como: Bajo (sin vulnerabilidad especial), Medio (alguna vulnerabilidad), Alto (requiere atención prioritaria), Crítico (atención inmediata).',
     ),
@@ -353,7 +353,7 @@ function buildDocument(data: ExportData): Document {
     ),
     heading('Ley 19.628 — Protección de Datos Personales', HeadingLevel.HEADING_2),
     paragraph(
-      'Esta ley protege los datos personales de las personas (nombre, RUT, dirección, salud, ubicación). En términos simples: cualquier ficha FIBER o registro que contenga datos sensibles debe contar con el consentimiento del titular, estar resguardado con acceso restringido y dejar registro de quién lo consulta o lo modifica. Por eso este sistema mantiene una bitácora de auditoría de cada acción.',
+      'Esta ley protege los datos personales de las personas (nombre, RUT, dirección, salud, ubicación). En términos simples: cualquier ficha de registro operativo o registro que contenga datos sensibles debe contar con el consentimiento del titular, estar resguardado con acceso restringido y dejar registro de quién lo consulta o lo modifica. Por eso este sistema mantiene una bitácora de auditoría de cada acción.',
     ),
     heading('Ley 21.519 — Marco de Ciberseguridad', HeadingLevel.HEADING_2),
     paragraph(
@@ -459,7 +459,7 @@ function buildDocument(data: ExportData): Document {
           bullet('1. Resumen Ejecutivo'),
           bullet('2. Alertas Activas'),
           bullet('3. Incidentes Registrados'),
-          bullet('4. Personas en Riesgo (Fichas FIBER)'),
+          bullet('4. Personas en Riesgo (Fichas de Registro Operativo)'),
           bullet('5. Cumplimiento Legal y Ciberseguridad'),
           bullet('6. Recomendaciones'),
           new Paragraph({

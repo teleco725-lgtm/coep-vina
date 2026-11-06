@@ -171,7 +171,7 @@ function slide2SituacionActual(pptx: pptxgen, data: ExportData): pptxgen.Slide {
     {
       v: fichasCriticas,
       l: 'Personas en riesgo',
-      s: 'Fichas FIBER con riesgo crítico o alto',
+      s: 'Fichas de Registro Operativo con riesgo crítico o alto',
       c: COLOR_ACCENT,
     },
   ];
@@ -196,7 +196,7 @@ function slide2SituacionActual(pptx: pptxgen, data: ExportData): pptxgen.Slide {
   });
 
   slide.addText(
-    `Fuentes conectadas: ${data.sources.length} · Total de fichas FIBER: ${data.fichas.length}`,
+    `Fuentes conectadas: ${data.sources.length} · Total de fichas de registro operativo: ${data.fichas.length}`,
     {
       x: 0.5, y: 5.0, w: SLIDE_W - 1, h: 0.4,
       align: 'center', fontSize: 12, color: COLOR_MUTED, fontFace: 'Arial',
@@ -315,12 +315,12 @@ function slide5PersonasRiesgo(pptx: pptxgen, data: ExportData): pptxgen.Slide {
   const slide = pptx.addSlide();
   slide.background = { color: COLOR_BG };
   addBrandHeader(slide, pptx, 'Personas en Riesgo');
-  slide.addText('Personas en riesgo — fichas FIBER', {
+  slide.addText('Personas en riesgo — fichas de registro operativo', {
     x: 0.5, y: 0.85, w: SLIDE_W - 1, h: 0.5,
     align: 'center', fontSize: 26, bold: true, color: COLOR_DARK, fontFace: 'Arial',
   });
   slide.addText(
-    'Distribución de las fichas FIBER por nivel de riesgo. Cada nivel describe la prioridad de atención.',
+    'Distribución de las fichas de registro operativo por nivel de riesgo. Cada nivel describe la prioridad de atención.',
     {
       x: 0.5, y: 1.35, w: SLIDE_W - 1, h: 0.45,
       align: 'center', fontSize: 12, color: COLOR_MUTED, fontFace: 'Arial',

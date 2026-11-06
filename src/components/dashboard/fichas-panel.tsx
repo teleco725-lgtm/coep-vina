@@ -148,7 +148,7 @@ export function FichasPanel() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-2 text-base">
             <Users className="h-4 w-4 text-primary" />
-            Fichas FIBER · Registro de Bienestar y Riesgo
+            Fichas de Registro Operativo
           </CardTitle>
           <div className="flex items-center gap-2">
             <Button
@@ -522,7 +522,7 @@ function NewFichaDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Nueva Ficha FIBER</DialogTitle>
+          <DialogTitle>Nueva Ficha de Registro Operativo</DialogTitle>
           <DialogDescription>
             Registro individual de bienestar y riesgo. Datos sensibles bajo Ley
             19.628 — requiere consentimiento informado del titular.

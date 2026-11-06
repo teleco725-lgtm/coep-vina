@@ -369,8 +369,8 @@ async function renderPdf(data: ExportData): Promise<Buffer> {
         pageHeight,
       );
 
-      // Section 4: Fichas FIBER
-      y = drawHeading(doc, '4. Personas en Riesgo (Fichas FIBER)', 1, y, margin, pageWidth, pageHeight);
+      // Section 4: Fichas de Registro Operativo
+      y = drawHeading(doc, '4. Personas en Riesgo (Fichas de Registro Operativo)', 1, y, margin, pageWidth, pageHeight);
       y = drawParagraph(
         doc,
         'Registro de personas en situación de vulnerabilidad o riesgo. El nivel de riesgo se interpreta como: Bajo (sin vulnerabilidad especial), Medio (alguna vulnerabilidad), Alto (requiere atención prioritaria), Crítico (atención inmediata).',
@@ -436,7 +436,7 @@ async function renderPdf(data: ExportData): Promise<Buffer> {
       y = drawHeading(doc, 'Ley 19.628 — Protección de Datos Personales', 2, y, margin, pageWidth, pageHeight);
       y = drawParagraph(
         doc,
-        'Esta ley protege los datos personales de las personas (nombre, RUT, dirección, salud, ubicación). En términos simples: cualquier ficha FIBER o registro que contenga datos sensibles debe contar con el consentimiento del titular, estar resguardado con acceso restringido y dejar registro de quién lo consulta o lo modifica. Por eso este sistema mantiene una bitácora de auditoría de cada acción.',
+        'Esta ley protege los datos personales de las personas (nombre, RUT, dirección, salud, ubicación). En términos simples: cualquier ficha de registro operativo o registro que contenga datos sensibles debe contar con el consentimiento del titular, estar resguardado con acceso restringido y dejar registro de quién lo consulta o lo modifica. Por eso este sistema mantiene una bitácora de auditoría de cada acción.',
         y,
         margin,
         pageWidth,

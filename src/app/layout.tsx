@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   title:
     "COEP Viña | Centro de Operaciones de Emergencia Provincial · VeltrixIntegra Ecosistema Digital 360",
   description:
-    "COEP Viña (Centro de Operaciones de Emergencia Provincial de Viña del Mar) · VeltrixIntegra Ecosistema Digital 360 · Región de Valparaíso. Plataforma integral de gestión de emergencias que integra SENAPRED, CONAF, SHOA, Bomberos CBV2, Carabineros y Radio. Mapa georreferenciado, fichas FIBER, notificaciones verificadas en tiempo real y panel de cumplimiento legal.",
+    "COEP Viña (Centro de Operaciones de Emergencia Provincial de Viña del Mar) · VeltrixIntegra Ecosistema Digital 360 · Región de Valparaíso. Plataforma integral de gestión de emergencias que integra SENAPRED, CONAF, SHOA, Bomberos CBV2, Carabineros y Radio. Mapa georreferenciado, fichas de registro operativo, notificaciones verificadas en tiempo real y panel de cumplimiento legal.",
   keywords: [
     "COEP Viña",
     "Centro de Operaciones de Emergencia Provincial",

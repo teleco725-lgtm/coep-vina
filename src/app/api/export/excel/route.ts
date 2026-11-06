@@ -2,7 +2,7 @@
 // GET /api/export/excel
 // ----------------------------------------------------------------------------
 // Genera un archivo .xlsx con múltiples hojas a partir de los datos del
-// dashboard (alertas, incidentes, fichas FIBER, resumen y cumplimiento legal).
+// dashboard (alertas, incidentes, fichas de registro operativo, resumen y cumplimiento legal).
 // Las librerías de generación (xlsx) corren del lado del servidor y no
 // afectan el bundle del cliente.
 // ============================================================================
@@ -162,7 +162,7 @@ export async function GET() {
       'Incidentes',
     );
 
-    // ----- Sheet 3: Fichas FIBER -----
+    // ----- Sheet 3: Fichas de Registro Operativo -----
     const fichaRows: (string | number)[][] = [
       [
         'Código',
@@ -199,7 +199,7 @@ export async function GET() {
     XLSX.utils.book_append_sheet(
       wb,
       buildSheet(fichaRows, { freeze: true }),
-      'Fichas FIBER',
+      'Fichas de Registro Operativo',
     );
 
     // ----- Sheet 4: Resumen -----
@@ -208,7 +208,7 @@ export async function GET() {
       ['Total de alertas', data.stats.alerts.total],
       ['Total de incidentes', data.stats.incidents.total],
       ['Incidentes activos', data.stats.incidents.active],
-      ['Total de fichas FIBER', data.stats.fichas.total],
+      ['Total de fichas de registro operativo', data.stats.fichas.total],
       [
         'Fichas críticas',
         (data.stats.fichas.byRiskLevel.critico ?? 0) +
@@ -289,7 +289,7 @@ export async function GET() {
       [''],
       ['Ley 19.628 — Protección de Datos de Carácter Personal'],
       ['Este documento contiene datos sensibles (RUT, teléfono, dirección, salud)'],
-      ['de personas vulnerables registradas en fichas FIBER.'],
+      ['de personas vulnerables registradas en fichas de registro operativo.'],
       [''],
       ['El acceso está restringido al personal autorizado del COEP Viña.'],
       ['La distribución externa requiere autorización expresa.'],
@@ -297,7 +297,7 @@ export async function GET() {
       ['Fecha de generación:', data.generatedAt.toISOString()],
       ['Generado por:', 'Sistema COEP Viña · VeltrixIntegra Ecosistema Digital 360'],
       [''],
-      ['Política de retención:', 'Fichas FIBER: emergencia + 5 años. Audit logs: 2 años.'],
+      ['Política de retención:', 'Fichas de Registro Operativo: emergencia + 5 años. Audit logs: 2 años.'],
       ['Trazabilidad:', 'Toda acción queda registrada en bitácora de auditoría.'],
     ];
     XLSX.utils.book_append_sheet(
